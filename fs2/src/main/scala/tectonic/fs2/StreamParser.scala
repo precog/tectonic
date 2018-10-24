@@ -37,7 +37,7 @@ object StreamParser {
    */
   @SuppressWarnings(Array("org.wartremover.warts.Throw"))
   def apply[F[_]: Sync, A](
-      parserF: F[GenericParser[Chunk[A]]])
+      parserF: F[BaseParser[Chunk[A]]])
       : Pipe[F, Byte, A] = { s =>
 
     Stream.eval(parserF) flatMap { parser =>
