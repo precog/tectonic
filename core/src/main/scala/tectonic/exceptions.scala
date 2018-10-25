@@ -17,8 +17,21 @@
 package tectonic
 
 import scala.Int
+import scala.util.control
 
 import java.lang.{Exception, String}
 
 final case class ParseException(msg: String, index: Int, line: Int, col: Int) extends Exception(msg)
 final case class IncompleteParseException(msg: String) extends Exception(msg)
+
+/**
+ * This class is used internally by Parser to signal that we've
+ * reached the end of the particular input we were given.
+ */
+private[tectonic] final class AsyncException extends Exception with control.NoStackTrace
+
+/**
+ * This is a more prosaic exception which indicates that we've hit a
+ * parsing error.
+ */
+private[tectonic] final class FailureException extends Exception

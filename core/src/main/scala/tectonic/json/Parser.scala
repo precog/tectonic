@@ -43,15 +43,24 @@ package json
  * kDEALINGS IN THE SOFTWARE.
  */
 
-import tectonic.util.BList
+import tectonic.util.{BList, CharBuilder}
 
-import scala.{inline, Array, Boolean, Byte, Char, Either, Int, Left, Long, Right, Unit}
-import scala.annotation.switch
-import scala.math.max
-import scala.util.control
+import scala.{
+  inline,
+  Array,
+  Boolean,
+  Char,
+  Either,
+  Int,
+  Left,
+  Long,
+  StringContext,
+  Right,
+  Unit
+}
+import scala.annotation.{switch, tailrec}
 
-import java.lang.{CharSequence, Exception, String, SuppressWarnings, System}
-import java.nio.ByteBuffer
+import java.lang.{CharSequence, IndexOutOfBoundsException, SuppressWarnings}
 
 object Parser {
 
@@ -65,10 +74,9 @@ object Parser {
       "org.wartremover.warts.DefaultArguments",
       "org.wartremover.warts.Null"))
   def apply[A](plate: Plate[A], mode: Mode = SingleValue): Parser[A] =
-    new Parser(plate, state = mode.start, curr = 0,
+    new Parser(plate, state = mode.start,
       ring = 0L, roffset = -1, fallback = null,
-      data = new Array[Byte](131072), len = 0, allocated = 131072,
-      offset = 0, done = false, streamMode = mode.value)
+      streamMode = mode.value)
 }
 
 /**
@@ -109,62 +117,19 @@ object Parser {
  *   -1: No streaming is occuring. Only a single JSON value is
  *       allowed.
  */
-@SuppressWarnings(Array("org.wartremover.warts.Var"))
-final class Parser[A] protected[tectonic] (
-  _plate: Plate[A],
-  protected[tectonic] var state: Int,
-  protected[tectonic] var curr: Int,
-  protected[tectonic] var ring: Long,
-  protected[tectonic] var roffset: Int,
-  protected[tectonic] var fallback: BList,
-  protected[tectonic] var data: Array[Byte],
-  protected[tectonic] var len: Int,
-  protected[tectonic] var allocated: Int,
-  protected[tectonic] var offset: Int,
-  protected[tectonic] var done: Boolean,
-  protected[tectonic] var streamMode: Int
-) extends BaseParser[A](_plate) with ByteBasedParser[A] with GenericParser[A] {
-
-  protected[this] var line = 0
-  protected[this] var pos = 0
-  protected[this] final def newline(i: Int): Unit = { line += 1; pos = i + 1 }
-  protected[this] final def column(i: Int) = i - pos
-
-  final def copy(): Parser[A] =
-    new Parser(_plate, state, curr, ring, roffset, fallback, data.clone, len, allocated, offset, done, streamMode)
-
-  @SuppressWarnings(
-    Array(
-      "org.wartremover.warts.NonUnitStatements",
-      "org.wartremover.warts.Overloading"))
-  final def absorb(buf: ByteBuffer): Either[ParseException, A] = {
-    done = false
-    val buflen = buf.limit() - buf.position()
-    val need = len + buflen
-    resizeIfNecessary(need)
-    buf.get(data, len, buflen)
-    len = need
-    churn()
-  }
-
-  final def finish(): Either[ParseException, A] = {
-    done = true
-    churn()
-  }
-
-  protected[this] final def resizeIfNecessary(need: Int): Unit = {
-    // if we don't have enough free space available we'll need to grow our
-    // data array. we never shrink the data array, assuming users will call
-    // feed with similarly-sized buffers.
-    if (need > allocated) {
-      val doubled = if (allocated < 0x40000000) allocated * 2 else Int.MaxValue
-      val newsize = max(need, doubled)
-      val newdata = new Array[Byte](newsize)
-      System.arraycopy(data, 0, newdata, 0, len)
-      data = newdata
-      allocated = newsize
-    }
-  }
+@SuppressWarnings(
+  Array(
+    "org.wartremover.warts.Var",
+    "org.wartremover.warts.FinalVal",
+    "org.wartremover.warts.PublicInference"))   // needed due to bug in WartRemover
+final class Parser[A] private (
+    plate: Plate[A],
+    private[this] var state: Int,
+    private[this] var ring: Long,
+    private[this] var roffset: Int,
+    private[this] var fallback: BList,
+    private[this] var streamMode: Int)
+    extends BaseParser[A] {
 
   /**
    * Explanation of the new synthetic states. The parser machinery
@@ -188,17 +153,38 @@ final class Parser[A] protected[tectonic] (
    * ASYNC_PREVAL: We are in an array and we just saw a comma. We
    * expect to see whitespace or a JSON value.
    */
-  @inline private[this] final def ASYNC_PRESTART = -5
-  @inline private[this] final def ASYNC_START = -4
-  @inline private[this] final def ASYNC_END = -3
-  @inline private[this] final def ASYNC_POSTVAL = -2
-  @inline private[this] final def ASYNC_PREVAL = -1
+  @inline private[this] final val ASYNC_PRESTART = -5
+  @inline private[this] final val ASYNC_START = -4
+  @inline private[this] final val ASYNC_END = -3
+  @inline private[this] final val ASYNC_POSTVAL = -2
+  @inline private[this] final val ASYNC_PREVAL = -1
+
+  /**
+   * Valid parser states.
+   */
+  @inline private[this] final val ARRBEG = 6
+  @inline private[this] final val OBJBEG = 7
+  @inline private[this] final val DATA = 1
+  @inline private[this] final val KEY = 2
+  @inline private[this] final val SEP = 3
+  @inline private[this] final val ARREND = 4
+  @inline private[this] final val OBJEND = 5
+
+  @SuppressWarnings(Array("org.wartremover.warts.While"))
+  private[this] val HexChars: Array[Int] = {
+    val arr = new Array[Int](128)
+    var i = 0
+    while (i < 10) { arr(i + '0') = i; i += 1 }
+    i = 0
+    while (i < 16) { arr(i + 'a') = 10 + i; arr(i + 'A') = 10 + i; i += 1 }
+    arr
+  }
 
   @SuppressWarnings(
     Array(
       "org.wartremover.warts.Equals",
       "org.wartremover.warts.While"))
-  protected[tectonic] def churn(): Either[ParseException, A] = {
+  protected[this] def churn(): Either[ParseException, A] = {
 
     // we rely on exceptions to tell us when we run out of data
     try {
@@ -296,21 +282,6 @@ final class Parser[A] protected[tectonic] (
     }
   }
 
-  // every 1M we shift our array back to the beginning.
-  protected[this] final def reset(i: Int): Int = {
-    if (offset >= 1048576) {
-      val diff = offset
-      curr -= diff
-      len -= diff
-      offset = 0
-      pos -= diff
-      System.arraycopy(data, diff, data, 0, len)
-      i - diff
-    } else {
-      i
-    }
-  }
-
   /**
    * We use this to keep track of the last recoverable place we've
    * seen. If we hit an AsyncException, we can later resume from this
@@ -320,7 +291,7 @@ final class Parser[A] protected[tectonic] (
    * arguments are the exact arguments we can pass to rparse to
    * continue where we left off.
    */
-  protected[this] final def checkpoint(state: Int, i: Int, ring: Long, offset: Int, fallback: BList): Unit = {
+  protected[this] def checkpoint(state: Int, i: Int, ring: Long, offset: Int, fallback: BList): Unit = {
     this.state = state
     this.curr = i
     this.ring = ring
@@ -329,51 +300,569 @@ final class Parser[A] protected[tectonic] (
   }
 
   /**
-   * This is a specialized accessor for the case where our underlying data are
-   * bytes not chars.
-   */
-  @SuppressWarnings(Array("org.wartremover.warts.Throw"))
-  protected[this] final def byte(i: Int): Byte =
-    if (i >= len) throw new AsyncException else data(i)
-
-  // we need to signal if we got out-of-bounds
-  @SuppressWarnings(Array("org.wartremover.warts.Throw"))
-  protected[this] final def at(i: Int): Char =
-    if (i >= len) throw new AsyncException else data(i).toChar
-
-  /**
-   * Access a byte range as a string.
+   * Parse the given number, and add it to the given context.
    *
-   * Since the underlying data are UTF-8 encoded, i and k must occur on unicode
-   * boundaries. Also, the resulting String is not guaranteed to have length
-   * (k - i).
+   * We don't actually instantiate a number here, but rather pass the
+   * string of for future use. Facades can choose to be lazy and just
+   * store the string. This ends up being way faster and has the nice
+   * side-effect that we know exactly how the user represented the
+   * number.
    */
-  @SuppressWarnings(Array("org.wartremover.warts.Throw"))
-  protected[this] final def at(i: Int, k: Int): CharSequence = {
-    if (k > len) throw new AsyncException
-    val size = k - i
-    val arr = new Array[Byte](size)
-    System.arraycopy(data, i, arr, 0, size)
-    new String(arr, utf8)
+  @SuppressWarnings(
+    Array(
+      "org.wartremover.warts.While",
+      "org.wartremover.warts.NonUnitStatements",
+      "org.wartremover.warts.Equals"))
+  protected[this] def parseNum(i: Int): Int = {
+    var j = i
+    var c = at(j)
+    var decIndex = -1
+    var expIndex = -1
+
+    if (c == '-') {
+      j += 1
+      c = at(j)
+    }
+    if (c == '0') {
+      j += 1
+      c = at(j)
+    } else if ('1' <= c && c <= '9') {
+      while ('0' <= c && c <= '9') { j += 1; c = at(j) }
+    } else {
+      die(i, "expected digit")
+    }
+
+    if (c == '.') {
+      decIndex = j - i
+      j += 1
+      c = at(j)
+      if ('0' <= c && c <= '9') {
+        while ('0' <= c && c <= '9') { j += 1; c = at(j) }
+      } else {
+        die(i, "expected digit")
+      }
+    }
+
+    if (c == 'e' || c == 'E') {
+      expIndex = j - i
+      j += 1
+      c = at(j)
+      if (c == '+' || c == '-') {
+        j += 1
+        c = at(j)
+      }
+      if ('0' <= c && c <= '9') {
+        while ('0' <= c && c <= '9') { j += 1; c = at(j) }
+      } else {
+        die(i, "expected digit")
+      }
+    }
+
+    plate.num(at(i, j), decIndex, expIndex)
+    j
   }
 
-  // the basic idea is that we don't signal EOF until done is true, which means
-  // the client explicitly send us an EOF.
-  protected[this] final def atEof(i: Int): Boolean =
-    if (done) i >= len else false
+  /**
+   * Parse the given number, and add it to the given context.
+   *
+   * This method is a bit slower than parseNum() because it has to be
+   * sure it doesn't run off the end of the input.
+   *
+   * Normally (when operating in rparse in the context of an outer
+   * array or object) we don't need to worry about this and can just
+   * grab characters, because if we run out of characters that would
+   * indicate bad input. This is for cases where the number could
+   * possibly be followed by a valid EOF.
+   *
+   * This method has all the same caveats as the previous method.
+   */
+  @SuppressWarnings(
+    Array(
+      "org.wartremover.warts.Var",
+      "org.wartremover.warts.While",
+      "org.wartremover.warts.Return",
+      "org.wartremover.warts.NonUnitStatements",
+      "org.wartremover.warts.Equals"))
+  protected[this] def parseNumSlow(i: Int): Int = {
+    var j = i
+    var c = at(j)
+    var decIndex = -1
+    var expIndex = -1
 
-  // we don't have to do anything special on close.
-  protected[this] final def close(): Unit = ()
+    if (c == '-') {
+      // any valid input will require at least one digit after -
+      j += 1
+      c = at(j)
+    }
+    if (c == '0') {
+      j += 1
+      if (atEof(j)) {
+        plate.num(at(i, j), decIndex, expIndex)
+        return j
+      }
+      c = at(j)
+    } else if ('1' <= c && c <= '9') {
+      while ('0' <= c && c <= '9') {
+        j += 1
+        if (atEof(j)) {
+          plate.num(at(i, j), decIndex, expIndex)
+          return j
+        }
+        c = at(j)
+      }
+    } else {
+      die(i, "expected digit")
+    }
+
+    if (c == '.') {
+      // any valid input will require at least one digit after .
+      decIndex = j - i
+      j += 1
+      c = at(j)
+      if ('0' <= c && c <= '9') {
+        while ('0' <= c && c <= '9') {
+          j += 1
+          if (atEof(j)) {
+            plate.num(at(i, j), decIndex, expIndex)
+            return j
+          }
+          c = at(j)
+        }
+      } else {
+        die(i, "expected digit")
+      }
+    }
+
+    if (c == 'e' || c == 'E') {
+      // any valid input will require at least one digit after e, e+, etc
+      expIndex = j - i
+      j += 1
+      c = at(j)
+      if (c == '+' || c == '-') {
+        j += 1
+        c = at(j)
+      }
+      if ('0' <= c && c <= '9') {
+        while ('0' <= c && c <= '9') {
+          j += 1
+          if (atEof(j)) {
+            plate.num(at(i, j), decIndex, expIndex)
+            return j
+          }
+          c = at(j)
+        }
+      } else {
+        die(i, "expected digit")
+      }
+    }
+
+    plate.num(at(i, j), decIndex, expIndex)
+    j
+  }
+
+  /**
+   * Generate a Char from the hex digits of "\u1234" (i.e. "1234").
+   *
+   * NOTE: This is only capable of generating characters from the basic plane.
+   * This is why it can only return Char instead of Int.
+   */
+  @SuppressWarnings(Array("org.wartremover.warts.While"))
+  protected[this] def descape(s: CharSequence): Char = {
+    val hc = HexChars
+    var i = 0
+    var x = 0
+    while (i < 4) {
+      x = (x << 4) | hc(s.charAt(i).toInt)
+      i += 1
+    }
+    x.toChar
+  }
+
+  /**
+   * See if the string has any escape sequences. If not, return the end of the
+   * string. If so, bail out and return -1.
+   *
+   * This method expects the data to be in UTF-8 and accesses it as bytes. Thus
+   * we can just ignore any bytes with the highest bit set.
+   */
+  @SuppressWarnings(
+    Array(
+      "org.wartremover.warts.Equals",
+      "org.wartremover.warts.Return",
+      "org.wartremover.warts.While"))
+  protected[this] def parseStringSimple(i: Int): Int = {
+    var j = i
+    var c: Int = byte(j) & 0xff
+    while (c != 34) {
+      if (c < 32) die(j, s"control char ($c) in string")
+      if (c == 92) return -1
+      j += 1
+      c = byte(j) & 0xff
+    }
+    j + 1
+  }
+
+  /**
+   * Parse the JSON string starting at 'i' and save it into the plate.
+   * If key is true, save the string with 'nestMap', otherwise use 'str'.
+   */
+   @SuppressWarnings(
+    Array(
+      "org.wartremover.warts.Equals",
+      "org.wartremover.warts.NonUnitStatements",
+      "org.wartremover.warts.While",
+      "org.wartremover.warts.Return"))
+  protected[this] def parseString(i: Int, key: Boolean): Int = {
+    val k = parseStringSimple(i + 1)
+    if (k != -1) {
+      val cs = at(i + 1, k - 1)
+      if (key) plate.nestMap(cs) else plate.str(cs)
+      return k
+    }
+
+    // TODO: we might be able to do better by identifying where
+    // escapes occur, and then translating the intermediate strings in
+    // one go.
+
+    var j = i + 1
+    val sb = new CharBuilder
+
+    var c: Int = byte(j) & 0xff
+    while (c != 34) { // "
+      if (c == 92) { // \
+        (byte(j + 1): @switch) match {
+          case 98 => { sb.append('\b'); j += 2 }
+          case 102 => { sb.append('\f'); j += 2 }
+          case 110 => { sb.append('\n'); j += 2 }
+          case 114 => { sb.append('\r'); j += 2 }
+          case 116 => { sb.append('\t'); j += 2 }
+
+          case 34 => { sb.append('"'); j += 2 }
+          case 47 => { sb.append('/'); j += 2 }
+          case 92 => { sb.append('\\'); j += 2 }
+
+          // if there's a problem then descape will explode
+          case 117 => { sb.append(descape(at(j + 2, j + 6))); j += 6 }
+
+          case c => die(j, s"invalid escape sequence (\\${c.toChar})")
+        }
+      } else if (c < 32) {
+        die(j, s"control char ($c) in string")
+      } else if (c < 128) {
+        // 1-byte UTF-8 sequence
+        sb.append(c.toChar)
+        j += 1
+      } else if ((c & 224) == 192) {
+        // 2-byte UTF-8 sequence
+        sb.extend(at(j, j + 2))
+        j += 2
+      } else if ((c & 240) == 224) {
+        // 3-byte UTF-8 sequence
+        sb.extend(at(j, j + 3))
+        j += 3
+      } else if ((c & 248) == 240) {
+        // 4-byte UTF-8 sequence
+        sb.extend(at(j, j + 4))
+        j += 4
+      } else {
+        die(j, "invalid UTF-8 encoding")
+      }
+      c = byte(j) & 0xff
+    }
+    if (key) plate.nestMap(sb.makeString) else plate.str(sb.makeString)
+    j + 1
+  }
+
+  /**
+   * Parse the JSON constant "true".
+   *
+   * Note that this method assumes that the first character has already been checked.
+   */
+  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+  protected[this] def parseTrue(i: Int): Unit =
+    if (at(i + 1) == 'r' && at(i + 2) == 'u' && at(i + 3) == 'e') {
+      val _ = plate.tru()
+      ()
+    } else {
+      die(i, "expected true")
+    }
+
+  /**
+   * Parse the JSON constant "false".
+   *
+   * Note that this method assumes that the first character has already been checked.
+   */
+  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+  protected[this] def parseFalse(i: Int): Unit =
+    if (at(i + 1) == 'a' && at(i + 2) == 'l' && at(i + 3) == 's' && at(i + 4) == 'e') {
+      val _ = plate.fls()
+      ()
+    } else {
+      die(i, "expected false")
+    }
+
+  /**
+   * Parse the JSON constant "null".
+   *
+   * Note that this method assumes that the first character has already been checked.
+   */
+  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+  protected[this] def parseNull(i: Int): Unit =
+    if (at(i + 1) == 'u' && at(i + 2) == 'l' && at(i + 3) == 'l') {
+      val _ = plate.nul()
+      ()
+    } else {
+      die(i, "expected null")
+    }
+
+  /**
+   * Parse and return the next JSON value and the position beyond it.
+   */
+  @SuppressWarnings(
+    Array(
+      "org.wartremover.warts.Throw",
+      "org.wartremover.warts.Recursion",
+      "org.wartremover.warts.Null"))
+  protected[this] def parse(i: Int): Int = try {
+    (at(i): @switch) match {
+      // ignore whitespace
+      case ' ' => parse(i + 1)
+      case '\t' => parse(i + 1)
+      case '\r' => parse(i + 1)
+      case '\n' => newline(i); parse(i + 1)
+
+      // if we have a recursive top-level structure, we'll delegate the parsing
+      // duties to our good friend rparse().
+      case '[' => rparse(ARRBEG, i + 1, 0L, 0, null)
+      case '{' => rparse(OBJBEG, i + 1, 1L, 0, null)
+
+      // we have a single top-level number
+      case '-' | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' =>
+        val j = parseNumSlow(i)
+        plate.finishRow()
+        j
+
+      // we have a single top-level string
+      case '"' =>
+        val j = parseString(i, false)
+        plate.finishRow()
+        j
+
+      // we have a single top-level constant
+      case 't' =>
+        parseTrue(i)
+        plate.finishRow()
+        i + 4
+
+      case 'f' =>
+        parseFalse(i)
+        plate.finishRow()
+        i + 5
+
+      case 'n' =>
+        parseNull(i)
+        plate.finishRow()
+        i + 4
+
+      // invalid
+      case _ => die(i, "expected json value")
+    }
+  } catch {
+    case _: IndexOutOfBoundsException =>
+      throw IncompleteParseException("exhausted input")
+  }
+
+  /**
+   * Tail-recursive parsing method to do the bulk of JSON parsing.
+   *
+   * This single method manages parser states, data, etc. Except for
+   * parsing non-recursive values (like strings, numbers, and
+   * constants) all important work happens in this loop (or in methods
+   * it calls, like reset()).
+   *
+   * Currently the code is optimized to make use of switch
+   * statements. Future work should consider whether this is better or
+   * worse than manually constructed if/else statements or something
+   * else. Also, it may be possible to reorder some cases for speed
+   * improvements.
+   */
+  @tailrec
+  @SuppressWarnings(
+    Array(
+      "org.wartremover.warts.NonUnitStatements",
+      "org.wartremover.warts.Equals"))
+  protected[this] def rparse(state: Int, j: Int, ring: Long, offset: Int, fallback: BList): Int = {
+    val i = reset(j)
+    checkpoint(state, i, ring, offset, fallback)
+
+    val c = at(i)
+
+    if (c == '\n') {
+      newline(i)
+      rparse(state, i + 1, ring, offset, fallback)
+    } else if (c == ' ' || c == '\t' || c == '\r') {
+      rparse(state, i + 1, ring, offset, fallback)
+    } else if (state == DATA) {
+      // we are inside an object or array expecting to see data
+      if (c == '[') {
+        var offset2 = offset
+        var ring2 = ring
+        var fallback2 = fallback
+
+        if (checkPushEnclosure(ring, offset, fallback)) {
+          offset2 = offset + 1
+          ring2 = pushEnclosureRing(ring, offset, false)
+        } else {
+          fallback2 = pushEnclosureFallback(fallback, false)
+        }
+
+        rparse(ARRBEG, i + 1, ring2, offset2, fallback2)
+      } else if (c == '{') {
+        var offset2 = offset
+        var ring2 = ring
+        var fallback2 = fallback
+
+        if (checkPushEnclosure(ring, offset, fallback)) {
+          offset2 = offset + 1
+          ring2 = pushEnclosureRing(ring, offset, true)
+        } else {
+          fallback2 = pushEnclosureFallback(fallback, true)
+        }
+
+        rparse(OBJBEG, i + 1, ring2, offset2, fallback2)
+      } else {
+        if ((c >= '0' && c <= '9') || c == '-') {
+          val j = parseNum(i)
+          rparse(if (enclosure(ring, offset, fallback)) OBJEND else ARREND, j, ring, offset, fallback)
+        } else if (c == '"') {
+          val j = parseString(i, false)
+          rparse(if (enclosure(ring, offset, fallback)) OBJEND else ARREND, j, ring, offset, fallback)
+        } else if (c == 't') {
+          parseTrue(i)
+          rparse(if (enclosure(ring, offset, fallback)) OBJEND else ARREND, i + 4, ring, offset, fallback)
+        } else if (c == 'f') {
+          parseFalse(i)
+          rparse(if (enclosure(ring, offset, fallback)) OBJEND else ARREND, i + 5, ring, offset, fallback)
+        } else if (c == 'n') {
+          parseNull(i)
+          rparse(if (enclosure(ring, offset, fallback)) OBJEND else ARREND, i + 4, ring, offset, fallback)
+        } else {
+          die(i, "expected json value")
+        }
+      }
+    } else if (
+      (c == ']' && (state == ARREND || state == ARRBEG)) ||
+      (c == '}' && (state == OBJEND || state == OBJBEG))
+    ) {
+      // we are inside an array or object and have seen a key or a closing
+      // brace, respectively.
+
+      var offset2 = offset
+      var fallback2 = fallback
+
+      if (checkPopEnclosure(ring, offset, fallback))
+        offset2 = offset - 1
+      else
+        fallback2 = popEnclosureFallback(fallback)
+
+      (state: @switch) match {
+        case ARRBEG => plate.arr()
+        case OBJBEG => plate.map()
+        case ARREND | OBJEND => plate.unnest()
+      }
+
+      if (offset2 < 0) {
+        plate.finishRow()
+        i + 1
+      } else {
+        rparse(if (enclosure(ring, offset2, fallback2)) OBJEND else ARREND, i + 1, ring, offset2, fallback2)
+      }
+    } else if (state == KEY) {
+      // we are in an object expecting to see a key.
+      if (c == '"') {
+        rparse(SEP, parseString(i, true), ring, offset, fallback)
+      } else {
+        die(i, "expected \"")
+      }
+    } else if (state == SEP) {
+      // we are in an object just after a key, expecting to see a colon.
+      if (c == ':') {
+        rparse(DATA, i + 1, ring, offset, fallback)
+      } else {
+        die(i, "expected :")
+      }
+    } else if (state == ARREND) {
+      // we are in an array, expecting to see a comma (before more data).
+      if (c == ',') {
+        plate.unnest()
+        plate.nestArr()
+        rparse(DATA, i + 1, ring, offset, fallback)
+      } else {
+        die(i, "expected ] or ,")
+      }
+    } else if (state == OBJEND) {
+      // we are in an object, expecting to see a comma (before more data).
+      if (c == ',') {
+        plate.unnest()
+        rparse(KEY, i + 1, ring, offset, fallback)
+      } else {
+        die(i, "expected } or ,")
+      }
+    } else if (state == ARRBEG) {
+      // we are starting an array, expecting to see data or a closing bracket.
+      plate.nestArr()
+      rparse(DATA, i, ring, offset, fallback)
+    } else {
+      // we are starting an object, expecting to see a key or a closing brace.
+      rparse(KEY, i, ring, offset, fallback)
+    }
+  }
+
+  /**
+   * A value of true indicates an object, and false indicates an array. Note that
+   * a non-existent enclosure is indicated by offset < 0
+   */
+  @inline
+  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+  private[this] final def enclosure(ring: Long, offset: Int, fallback: BList): Boolean = {
+    if (fallback == null)
+      (ring & (1L << offset)) != 0
+    else
+      fallback.head
+  }
+
+  @inline
+  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+  private[this] final def checkPushEnclosure(ring: Long, offset: Int, fallback: BList): Boolean =
+    fallback == null
+
+  @inline
+  private[this] final def pushEnclosureRing(ring: Long, offset: Int, enc: Boolean): Long = {
+    if (enc)
+      ring | (1L << (offset + 1))
+    else
+      ring & ~(1L << (offset + 1))
+  }
+
+  @inline
+  private[this] final def pushEnclosureFallback(fallback: BList, enc: Boolean): BList =
+    enc :: fallback
+
+  @inline
+  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+  private[this] final def checkPopEnclosure(ring: Long, offset: Int, fallback: BList): Boolean =
+    fallback == null
+
+  @inline
+  @SuppressWarnings(
+    Array(
+      "org.wartremover.warts.IsInstanceOf",
+      "org.wartremover.warts.AsInstanceOf",
+      "org.wartremover.warts.Null"))
+  private[this] final def popEnclosureFallback(fallback: BList): BList = {
+    if (fallback.isInstanceOf[BList.Last])
+      null
+    else
+      fallback.asInstanceOf[BList.Cons].tail
+  }
 }
-
-/**
- * This class is used internally by Parser to signal that we've
- * reached the end of the particular input we were given.
- */
-private[tectonic] class AsyncException extends Exception with control.NoStackTrace
-
-/**
- * This is a more prosaic exception which indicates that we've hit a
- * parsing error.
- */
-private[tectonic] class FailureException extends Exception

@@ -35,7 +35,7 @@ import java.nio.ByteBuffer
 object StreamParserSpecs extends Specification {
   import Event._
 
-  val parserF: IO[GenericParser[Chunk[Event]]] =
+  val parserF: IO[BaseParser[Chunk[Event]]] =
     IO(Parser(new ReifiedTerminalPlate().mapDelegate(Chunk.seq(_)), Parser.ValueStream))
 
   "stream parser transduction" should {
