@@ -15,6 +15,7 @@
  */
 
 package tectonic
+package test
 
 import org.specs2.matcher.{Matcher, MatchersImplicits}
 
@@ -25,7 +26,7 @@ import scala.util.{Left, Right}
 
 import java.lang.String
 
-package object test {
+package object json {
   private object MatchersImplicits extends MatchersImplicits
 
   import MatchersImplicits._

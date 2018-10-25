@@ -19,7 +19,8 @@ package json
 
 import org.specs2.mutable.Specification
 
-import tectonic.test._
+import tectonic.test.Event
+import tectonic.test.json._
 
 import scala.{Array, Boolean, Int, List, Unit, Predef}, Predef._
 import scala.collection.mutable
