@@ -8,6 +8,8 @@ scmInfo in ThisBuild := Some(ScmInfo(
 
 val Fs2Version = "1.0.0"
 
+ThisBuild / publishAsOSSProject := true
+
 // Include to also publish a project's tests
 lazy val publishTestsSettings = Seq(
   publishArtifact in (Test, packageBin) := true)
@@ -21,9 +23,6 @@ lazy val root = project
 lazy val core = project
   .in(file("core"))
   .settings(name := "tectonic")
-  .settings(
-    performMavenCentralSync := false,
-    publishAsOSSProject := true)
   .enablePlugins(AutomateHeaderPlugin)
 
 lazy val fs2 = project
@@ -33,9 +32,6 @@ lazy val fs2 = project
     test % "test->test")
   .settings(name := "tectonic-fs2")
   .settings(
-    performMavenCentralSync := false,
-    publishAsOSSProject := true,
-
     libraryDependencies += "co.fs2" %% "fs2-core" % Fs2Version)
   .enablePlugins(AutomateHeaderPlugin)
 
@@ -44,9 +40,6 @@ lazy val test = project
   .dependsOn(core)
   .settings(name := "tectonic-test")
   .settings(
-    performMavenCentralSync := false,
-    publishAsOSSProject := true,
-
     libraryDependencies += "org.specs2" %% "specs2-core" % "4.3.4")
   .enablePlugins(AutomateHeaderPlugin)
 
