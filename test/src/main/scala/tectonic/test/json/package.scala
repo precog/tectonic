@@ -40,7 +40,7 @@ package object json {
     (parser.absorb(input), parser.finish()) match {
       case (Right(init), Right(tail)) =>
         val results = init ++ tail
-        (results == expected.toList, s"expected $expected and got $results")
+        (results == expected.toList, s"$results != ${expected.toList}")
 
       case (Left(err), _) =>
         (false, s"failed to parse with error '${err.getMessage}' at ${err.line}:${err.col} (i=${err.index})")

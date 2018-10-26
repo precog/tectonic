@@ -277,6 +277,7 @@ final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser
         parse(i + 1, 0)
       } else if ((byte(i + 1) & 0xff) == row2) {
         this.header = pheader.reverse.toArray
+        plate.finishRow()
         parse(i + 2, 0)
       } else {
         val curh = asHeader(column)
@@ -316,7 +317,11 @@ final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser
       cur /= 26
     } while (cur > 0)
 
-    new String(back, 0, back.length - i)    // we might have gone 1 too far
+    if (back.length > 1) {
+      back(0) = (back(0) - 1).toChar    // this is stupid, but we want A = 1 in the most-significant column
+    }
+
+    new String(back)
   }
 }
 

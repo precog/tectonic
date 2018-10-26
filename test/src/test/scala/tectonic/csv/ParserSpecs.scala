@@ -22,6 +22,8 @@ import org.specs2.mutable.Specification
 import tectonic.test.Event
 import tectonic.test.csv._
 
+import scala.List
+
 object ParserSpecs extends Specification {
   import Event._
 
@@ -63,6 +65,40 @@ object ParserSpecs extends Specification {
     "allow \" in quoted values with escaping" in {
       "a\r\n\"fu\"\"bar\"\r\n" must parseAs(NestMap("a"), Str("fu\"bar"), Unnest, FinishRow)
     }
+
+    "infer headers when unspecified" in {
+      implicit val c = Parser.Config().copy(header = false)
+
+      val input = "r1c1,r1c2,r1c3\r\nr2c1,r2c2,r2c3\r\nr3c1,r3c2,r3c3\r\n"
+      input must parseAs(
+        NestMap("A"), Str("r1c1"), Unnest,
+        NestMap("B"), Str("r1c2"), Unnest,
+        NestMap("C"), Str("r1c3"), Unnest, FinishRow,
+        NestMap("A"), Str("r2c1"), Unnest,
+        NestMap("B"), Str("r2c2"), Unnest,
+        NestMap("C"), Str("r2c3"), Unnest, FinishRow,
+        NestMap("A"), Str("r3c1"), Unnest,
+        NestMap("B"), Str("r3c2"), Unnest,
+        NestMap("C"), Str("r3c3"), Unnest, FinishRow)
+    }
+
+    "infer a really really long header" in {
+      import scala.Predef, Predef._
+
+      implicit val c = Parser.Config().copy(header = false)
+
+      val input = (0 until 52).mkString(",") + "\r\n"
+      val headers = List(
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+        "AA", "AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI", "AJ", "AK", "AL", "AM", "AN", "AO", "AP", "AQ", "AR", "AS", "AT", "AU", "AV", "AW", "AX", "AY", "AZ")
+
+      val generated = headers.zipWithIndex flatMap {
+        case (header, i) =>
+          List(NestMap(header), Str(i.toString), Unnest)
+      }
+
+      input must parseAs(generated ::: List(FinishRow): _*)
+    }
   }
 
   "excel-style with unix newlines" should {
@@ -84,6 +120,22 @@ object ParserSpecs extends Specification {
         NestMap("a"), Str("r3c1"), Unnest,
         NestMap("b"), Str("r3c2"), Unnest,
         NestMap("c"), Str("r3c3"), Unnest, FinishRow)
+    }
+
+    "infer headers when unspecified" in {
+      implicit val c = Parser.Config().copy(header = false, row1 = '\n', row2 = 0)
+
+      val input = "r1c1,r1c2,r1c3\nr2c1,r2c2,r2c3\nr3c1,r3c2,r3c3\n"
+      input must parseAs(
+        NestMap("A"), Str("r1c1"), Unnest,
+        NestMap("B"), Str("r1c2"), Unnest,
+        NestMap("C"), Str("r1c3"), Unnest, FinishRow,
+        NestMap("A"), Str("r2c1"), Unnest,
+        NestMap("B"), Str("r2c2"), Unnest,
+        NestMap("C"), Str("r2c3"), Unnest, FinishRow,
+        NestMap("A"), Str("r3c1"), Unnest,
+        NestMap("B"), Str("r3c2"), Unnest,
+        NestMap("C"), Str("r3c3"), Unnest, FinishRow)
     }
   }
 }
