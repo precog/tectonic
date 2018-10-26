@@ -16,7 +16,7 @@
 
 package tectonic
 
-import _root_.fs2.Chunk
+import scala.collection.immutable.List
 
 import org.openjdk.jmh.infra.Blackhole
 
@@ -26,7 +26,7 @@ final class BlackholePlate(
     tinyScalarCost: Long,
     numericCost: Long,
     rowCost: Long,
-    batchCost: Long) extends Plate[Chunk[Nothing]] {
+    batchCost: Long) extends Plate[List[Nothing]] {
 
   import Blackhole.consumeCPU
 
@@ -92,8 +92,8 @@ final class BlackholePlate(
   def finishRow(): Unit =
     consumeCPU(rowCost)
 
-  def finishBatch(terminal: Boolean): Chunk[Nothing] = {
+  def finishBatch(terminal: Boolean): List[Nothing] = {
     consumeCPU(batchCost)
-    Chunk.empty[Nothing]
+    List.empty[Nothing]
   }
 }

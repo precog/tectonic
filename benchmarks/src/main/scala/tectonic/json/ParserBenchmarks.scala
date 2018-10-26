@@ -19,6 +19,7 @@ package json
 
 import cats.effect.{ContextShift, IO}
 
+import _root_.fs2.Chunk
 import _root_.fs2.io.file
 
 import jawnfs2._
@@ -28,6 +29,7 @@ import org.openjdk.jmh.infra.Blackhole
 
 import tectonic.fs2.StreamParser
 
+import scala.collection.immutable.List
 import scala.concurrent.ExecutionContext
 
 import java.nio.file.Paths
@@ -105,7 +107,10 @@ class ParserBenchmarks {
 
     val processed = if (framework == TectonicFramework) {
       val mode = if (inputMode) Parser.UnwrapArray else Parser.ValueStream
-      contents.through(StreamParser[IO, Nothing](IO(Parser(plate, mode))))
+      val parser = StreamParser(IO(Parser(plate, mode): BaseParser[List[Nothing]]))(
+        _ => Chunk.empty[Nothing],
+        _ => Chunk.empty[Nothing])
+      contents.through(parser)
     } else {
       if (inputMode)
         contents.chunks.unwrapJsonArray
