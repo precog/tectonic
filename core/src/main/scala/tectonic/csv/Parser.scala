@@ -71,7 +71,7 @@ final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser
           error("invalid state in churn: " + state.toString)
       }
     } catch {
-      case e: AsyncException =>
+      case AsyncException =>
         if (done) {
           // if we are done, make sure we ended at a good stopping point
           if ((state == DATA || state == IHEADER) && column == 0)
