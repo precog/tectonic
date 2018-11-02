@@ -119,6 +119,8 @@ abstract class BaseParser[A] {
   final def absorb(s: String): Either[ParseException, A] =
     absorb(ByteBuffer.wrap(s.getBytes(BaseParser.Utf8)))
 
+  protected[this] final def unsafeData(): Array[Byte] = data
+  protected[this] final def unsafeLen(): Int = len
 
   /**
    * This is a specialized accessor for the case where our underlying data are

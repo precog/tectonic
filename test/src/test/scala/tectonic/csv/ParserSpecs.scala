@@ -30,7 +30,7 @@ object ParserSpecs extends Specification {
   "excel-style" should {
     implicit val c = Parser.Config()
 
-    "parse a single value" in {
+    "parse a single value in one column" in {
       "abc\r\nfubar\r\n" must parseAs(NestMap("abc"), Str("fubar"), Unnest, FinishRow)
     }
 
@@ -98,6 +98,32 @@ object ParserSpecs extends Specification {
       }
 
       input must parseAs(generated ::: List(FinishRow): _*)
+    }
+
+    "parse a single value with a row ending in EOF" in {
+      "abc\r\nfubar" must parseAs(NestMap("abc"), Str("fubar"), Unnest, FinishRow)
+    }
+
+    "parse two values with a row ending in EOF" in {
+      "abc,def\r\nfubar,baz" must parseAs(
+        NestMap("abc"), Str("fubar"), Unnest,
+        NestMap("def"), Str("baz"), Unnest, FinishRow)
+    }
+
+    "parse a single value with an inferred header ending in EOF" in {
+      implicit val c = Parser.Config().copy(header = false)
+
+      "fubar" must parseAs(NestMap("A"), Str("fubar"), Unnest, FinishRow)
+    }
+
+    "parse a single quoted value with a row ending in EOF" in {
+      "abc\r\n\"fubar\"" must parseAs(NestMap("abc"), Str("fubar"), Unnest, FinishRow)
+    }
+
+    "parse a single quoted value with an inferred header ending in EOF" in {
+      implicit val c = Parser.Config().copy(header = false)
+
+      "\"fubar\"" must parseAs(NestMap("A"), Str("fubar"), Unnest, FinishRow)
     }
   }
 

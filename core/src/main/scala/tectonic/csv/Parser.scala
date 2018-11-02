@@ -19,11 +19,11 @@ package csv
 
 import tectonic.util.CharBuilder
 
-import scala.{inline, Array, Boolean, Byte, Char, Int, List, Nil, Nothing}
+import scala.{inline, Array, Boolean, Byte, Char, Int, Nothing, Unit}
 import scala.annotation.{switch, tailrec}
 import scala.util.{Either, Left, Right}
 
-import java.lang.{CharSequence, String, SuppressWarnings}
+import java.lang.{CharSequence, String, SuppressWarnings, System}
 
   @SuppressWarnings(
     Array(
@@ -33,19 +33,36 @@ import java.lang.{CharSequence, String, SuppressWarnings}
       "org.wartremover.warts.PublicInference"))
 final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser[A] {
 
-  @inline private[this] final val SIG_RECORD = 1
-  @inline private[this] final val SIG_ROW1 = 2
-  @inline private[this] final val SIG_OPEN_QUOTE = 4
+  /*
+   * The state is a three-bit value representing the parsing of
+   * a record or a delimiter in all three of the following scenarios:
+   *
+   * - Normal row
+   * - Header row
+   * - Normal row that is *first* in a headerless input (infererence)
+   *
+   * Thus, INFERRING and HEADER are mutually exclusive, but we can't
+   * represent that directly in the bits.
+   */
 
-  @inline private[this] final val DATA = 0       // awaiting a record
-  @inline private[this] final val HEADER = 1       // awaiting a header entry
-  @inline private[this] final val IHEADER = 2       // awaiting an inferred header entry
+  @inline private[this] final val BASE_MASK = 1
+  @inline private[this] final val HEADER_MASK = 1 << 1
+  @inline private[this] final val INFER_MASK = 1 << 2
 
-  private[this] var state = if (config.header) HEADER else IHEADER
-  private[this] var pheader: List[CharSequence] = Nil   // parsed header entries in reverse order
+  @inline private[this] final val RECORD = 0       // awaiting a record
+  @inline private[this] final val END = 1          // awaiting a delimiter
 
-  private[this] var column = 0    // current column, regardless of state
-  private[this] var header: Array[CharSequence] = _   // actual header
+  @inline private[this] final val ROW = 0          // parsing a row
+  @inline private[this] final val HEADER = 1 << 1  // parsing a header
+
+  @inline private[this] final val NOT_INFERRING = 0   // not inferring headers
+  @inline private[this] final val INFERRING = 1 << 2  // inferring headers
+
+  private[this] final var state = if (config.header) HEADER else INFERRING
+
+  private[this] final var column = 0    // current column, regardless of state
+  private[this] final var header: Array[CharSequence] = new Array[CharSequence](32)   // hopefully optimize for 32 columns
+  private[this] final var headerMax = -1
 
   private[this] final val record: Int = config.record & 0xff
   private[this] final val row1: Int = config.row1 & 0xff
@@ -54,30 +71,45 @@ final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser
   private[this] final val closeQuote: Int = config.closeQuote & 0xff
   private[this] final val escape: Int = config.escape & 0xff
 
-  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+  @SuppressWarnings(
+    Array(
+      "org.wartremover.warts.Equals",
+      "org.wartremover.warts.NonUnitStatements"))
   protected[this] final def churn(): Either[ParseException, A] = {
     try {
-      (state: @switch) match {
-        case DATA =>
-          parse(curr, column)
-
-        case HEADER =>
-          hparse(curr, column, pheader)
-
-        case IHEADER =>
-          hiparse(curr, column, pheader)
-
-        case _ =>
-          error("invalid state in churn: " + state.toString)
-      }
+      parse(state, curr, column)
     } catch {
       case AsyncException =>
         if (done) {
           // if we are done, make sure we ended at a good stopping point
-          if ((state == DATA || state == IHEADER) && column == 0)
-            Right(plate.finishBatch(true))
-          else
-            Left(ParseException("exhausted input", -1, -1, -1))
+          if ((state & HEADER) == 0) {
+            (state & BASE_MASK: @switch) match {
+              case RECORD =>
+                if (column == 0) {
+                  // we just saw a complete row, just finish up
+                  Right(plate.finishBatch(true))
+                } else if (atEndOfRow(column) || (state & INFER_MASK) == INFERRING) {
+                  plate.nestMap(header(column))
+                  plate.str("")
+                  plate.unnest()
+                  plate.finishRow()
+                  Right(plate.finishBatch(true))
+                } else {
+                  Left(ParseException("unexpected end of file: missing records", -1, -1, -1))
+                }
+
+              case END =>
+                // treat EOF at the end of the row as an implicit record delimiter
+                if (atEndOfRow(column) || (state & INFER_MASK) == INFERRING) {
+                  plate.finishRow()
+                  Right(plate.finishBatch(true))
+                } else {
+                  Left(ParseException("unexpected end of file: missing records", -1, -1, -1))
+                }
+            }
+          } else {
+            Left(ParseException("unexpected end of file in header row", -1, -1, -1))
+          }
         } else {
           // we ran out of data, so return what we have so far
           Right(plate.finishBatch(false))
@@ -89,21 +121,25 @@ final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser
     }
   }
 
-  // must consume record delimiter; must NOT consume row delimiter
   @SuppressWarnings(
     Array(
       "org.wartremover.warts.Equals",
       "org.wartremover.warts.Return",
-      "org.wartremover.warts.While"))
+      "org.wartremover.warts.While",
+      "org.wartremover.warts.Throw"))
   private[this] final def parseRecordUnquoted(i: Int): CharSequence = {
+    if (done) {
+      return parseRecordUnquotedDone(i)
+    }
+
     var j = i
     var c: Int = byte(j) & 0xff
     while (true) {
       if (c == record) {
-        this.curr = j + 1   // consume the record delimiter
+        this.curr = j
         return at(i, j)
-      } else if (c == row1 && (row2 == '\u0000' || (byte(j + 1) & 0xff) == row2)) {
-        this.curr = j   // don't consume the row delimiter
+      } else if (c == row1 && (row2 == 0 || (byte(j + 1) & 0xff) == row2)) {
+        this.curr = j
         return at(i, j)
       }
 
@@ -114,13 +150,45 @@ final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser
     error("impossible")
   }
 
-  // must consume record delimiter; must NOT consume row delimiter
   @SuppressWarnings(
     Array(
       "org.wartremover.warts.Equals",
       "org.wartremover.warts.Return",
-      "org.wartremover.warts.While"))
+      "org.wartremover.warts.While",
+      "org.wartremover.warts.Throw"))
+  private[this] final def parseRecordUnquotedDone(i: Int): CharSequence = {
+    val data = unsafeData()
+    val len = unsafeLen()
+    var j = i
+    while (j < len) {
+      val c: Int = data(j) & 0xff
+
+      if (c == record) {
+        this.curr = j
+        return at(i, j)
+      } else if (c == row1 && (row2 == 0 || (j + 1 < len && (data(j + 1) & 0xff) == row2))) {
+        this.curr = j
+        return at(i, j)
+      }
+
+      j += 1
+    }
+
+    this.curr = j
+    at(i, j)
+  }
+
+  @SuppressWarnings(
+    Array(
+      "org.wartremover.warts.Equals",
+      "org.wartremover.warts.Return",
+      "org.wartremover.warts.While",
+      "org.wartremover.warts.Throw"))
   private[this] final def parseRecordQuoted(i: Int): CharSequence = {
+    if (done) {
+      return parseRecordQuotedDone(i)
+    }
+
     val sb = new CharBuilder
 
     var j = i
@@ -131,9 +199,6 @@ final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser
         j += 2
       } else {
         if (c == closeQuote) {
-          if ((byte(j + 1) & 0xff) == record) {
-            j += 1
-          }
           this.curr = j + 1
           return sb.makeString
         } else if (c < 128) {
@@ -163,144 +228,241 @@ final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser
     error("impossible")
   }
 
-  @tailrec
   @SuppressWarnings(
     Array(
-      "org.wartremover.warts.NonUnitStatements",
-      "org.wartremover.warts.Equals"))
-  private[this] final def parse(j: Int, column: Int): Nothing = {
-    val i = reset(j)
+      "org.wartremover.warts.Equals",
+      "org.wartremover.warts.Return",
+      "org.wartremover.warts.While",
+      "org.wartremover.warts.Throw"))
+  private[this] final def parseRecordQuotedDone(i: Int): CharSequence = {
+    val data = unsafeData()
+    val len = unsafeLen()
+    val sb = new CharBuilder
 
-    this.state = DATA
-    this.curr = i
-    this.column = column
+    var j = i
+    while (j < len) {
+      val c: Int = data(j) & 0xff
 
-    val c: Int = byte(i) & 0xff
-
-    if (c == record) {
-      plate.nestMap(header(column))
-      plate.str("")
-      plate.unnest()
-
-      parse(i + 1, column + 1)
-    } else if (c == row1) {
-      if (row2 == '\u0000') {
-        plate.finishRow()
-        parse(i + 1, 0)
-      } else if ((byte(i + 1) & 0xff) == row2) {
-        plate.finishRow()
-        parse(i + 2, 0)
+      if (c == escape && j + 1 < len && (data(j + 1) & 0xff) == closeQuote) {
+        sb.append(closeQuote.toChar)
+        j += 2
       } else {
-        val str = parseRecordUnquoted(i)    // consume first, so we get the AsyncException if relevant
-        plate.nestMap(header(column))
-        plate.str(str)
-        plate.unnest()
-        parse(curr, column + 1)
+        if (c == closeQuote) {
+          this.curr = j + 1
+          return sb.makeString
+        } else if (c < 128) {
+          // 1-byte UTF-8 sequence
+          sb.append(c.toChar)
+          j += 1
+        } else if ((c & 224) == 192) {
+          // 2-byte UTF-8 sequence
+          if (j + 1 < len) {
+            sb.extend(at(j, j + 2))
+            j += 2
+          } else {
+            die(j, "unexpected end of file: unclosed quoted record")
+          }
+        } else if ((c & 240) == 224) {
+          // 3-byte UTF-8 sequence
+          if (j + 2 < len) {
+            sb.extend(at(j, j + 3))
+            j += 3
+          } else {
+            die(j, "unexpected end of file: unclosed quoted record")
+          }
+        } else if ((c & 248) == 240) {
+          // 4-byte UTF-8 sequence
+          if (j + 3 < len) {
+            sb.extend(at(j, j + 4))
+            j += 4
+          } else {
+            die(j, "unexpected end of file: unclosed quoted record")
+          }
+        } else {
+          die(j, "invalid UTF-8 encoding")
+        }
       }
-    } else if (c == openQuote) {
-      val str = parseRecordQuoted(i + 1)    // consume first, so we get the AsyncException if relevant
-      plate.nestMap(header(column))
-      plate.str(str)
-      plate.unnest()
-      parse(curr, column + 1)
-    } else {
-      val str = parseRecordUnquoted(i)    // consume first, so we get the AsyncException if relevant
-      plate.nestMap(header(column))
-      plate.str(str)
-      plate.unnest()
-      parse(curr, column + 1)
     }
+
+    error("impossible")
   }
 
   @tailrec
   @SuppressWarnings(
     Array(
       "org.wartremover.warts.NonUnitStatements",
-      "org.wartremover.warts.Equals"))
-  private[this] final def hparse(j: Int, column: Int, pheader: List[CharSequence]): Nothing = {
+      "org.wartremover.warts.Equals",
+      "org.wartremover.warts.Throw",
+      "org.wartremover.warts.Throw"))
+  private[this] final def parse(state: Int, j: Int, column: Int): Nothing = {
     val i = reset(j)
 
+    this.state = state
     this.curr = i
     this.column = column
-    this.pheader = pheader
 
-    val c: Int = byte(i) & 0xff
+    val inHeader = (state & HEADER_MASK) == HEADER
+    val inferring = (state & INFER_MASK) == INFERRING
 
-    if (c == record) {
-      die(offset, "header field cannot be empty")
-    } else if (c == row1) {
-      if (row2 == '\u0000') {
-        this.header = pheader.reverse.toArray
-        parse(i + 1, 0)
-      } else if ((byte(i + 1) & 0xff) == row2) {
-        this.header = pheader.reverse.toArray
-        parse(i + 2, 0)
-      } else {
-        val str = parseRecordUnquoted(i)    // consume first, so we get the AsyncException if relevant
-        hparse(curr, column + 1, str :: pheader)
-      }
-    } else if (c == openQuote) {
-      val str = parseRecordQuoted(i + 1)    // consume first, so we get the AsyncException if relevant
-      hparse(curr, column + 1, str :: pheader)
-    } else {
-      val str = parseRecordUnquoted(i)    // consume first, so we get the AsyncException if relevant
-      hparse(curr, column + 1, str :: pheader)
+    if (inHeader || inferring) {
+      checkHeader(column)
+    }
+
+    // remove the base
+    val continue = state & ~BASE_MASK
+
+    (state & BASE_MASK: @switch) match {
+      case RECORD =>
+        val c: Int = byte(i) & 0xff
+
+        if (c == record) {
+          if (inHeader) {
+            die(i, "illegal empty header cell")
+          }
+
+          if (inferring) {
+            header(column) = asHeader(column)
+          }
+
+          plate.nestMap(header(column))
+          plate.str("")
+          plate.unnest()
+
+          parse(continue | RECORD, i + 1, column + 1)
+        } else if (c == row1) {
+          if (row2 == 0) {
+            if (inHeader) {
+              die(i, "illegal empty header cell")
+            }
+
+            if (inferring) {
+              header(column) = asHeader(column)
+              this.headerMax = column
+            }
+
+            if (inferring || atEndOfRow(column)) {
+              plate.nestMap(header(column))
+              plate.str("")
+              plate.unnest()
+              plate.finishRow()
+
+              parse(RECORD, i + 1, 0)
+            } else {
+              die(i, "unexpected end of row: missing records")
+            }
+          } else if ((byte(i + 1) & 0xff) == row2) {
+            if (inHeader) {
+              die(i, "illegal empty header cell")
+            }
+
+            if (inferring) {
+              header(column) = asHeader(column)
+              this.headerMax = column
+            }
+
+            if (inferring || atEndOfRow(column)) {
+              plate.nestMap(header(column))
+              plate.str("")
+              plate.unnest()
+              plate.finishRow()
+
+              parse(RECORD, i + 2, 0)
+            } else {
+              die(i, "unexpected end of row: missing records")
+            }
+          } else {
+            val str = parseRecordUnquoted(i)    // consume first, so we get the AsyncException if relevant
+
+            if (inHeader) {
+              header(column) = str
+            } else {
+              if (inferring) {
+                header(column) = asHeader(column)
+              }
+
+              plate.nestMap(header(column))
+              plate.str(str)
+              plate.unnest()
+            }
+
+            parse(continue | END, curr, column)
+          }
+        } else if (c == openQuote) {
+          val str = parseRecordQuoted(i + 1)    // consume first, so we get the AsyncException if relevant
+
+          if (inHeader) {
+            header(column) = str
+          } else {
+            if (inferring) {
+              header(column) = asHeader(column)
+            }
+
+            plate.nestMap(header(column))
+            plate.str(str)
+            plate.unnest()
+          }
+
+          parse(continue | END, curr, column)
+        } else {
+          val str = parseRecordUnquoted(i)    // consume first, so we get the AsyncException if relevant
+
+          if (inHeader) {
+            header(column) = str
+          } else {
+            if (inferring) {
+              header(column) = asHeader(column)
+            }
+
+            plate.nestMap(header(column))
+            plate.str(str)
+            plate.unnest()
+          }
+
+          parse(continue | END, curr, column)
+        }
+
+      case END =>
+        val c: Int = byte(i) & 0xff
+
+        if (c == record) {
+          parse(continue | RECORD, i + 1, column + 1)
+        } else if (c == row1) {
+          if (row2 == 0) {
+            if (inferring || inHeader) {
+              this.headerMax = column
+            }
+
+            if (!inHeader) {
+              plate.finishRow()
+            }
+
+            parse(RECORD, i + 1, 0)
+          } else if ((byte(i + 1) & 0xff) == row2) {
+            if (inferring || inHeader) {
+              this.headerMax = column
+            }
+
+            if (!inHeader) {
+              plate.finishRow()
+            }
+
+            parse(RECORD, i + 2, 0)
+          } else {
+            die(i, "unexpected character found at record boundary")
+          }
+        } else {
+          die(i, "unexpected character found at record boundary")
+        }
+
+      case _ => error("impossible state in parse: " + state.toString)
     }
   }
 
-  @tailrec
-  @SuppressWarnings(
-    Array(
-      "org.wartremover.warts.NonUnitStatements",
-      "org.wartremover.warts.Equals"))
-  private[this] final def hiparse(j: Int, column: Int, pheader: List[CharSequence]): Nothing = {
-    val i = reset(j)
-
-    this.curr = i
-    this.column = column
-    this.pheader = pheader
-
-    val c: Int = byte(i) & 0xff
-
-    if (c == record) {
-      val curh = asHeader(column)
-
-      plate.nestMap(curh)
-      plate.str("")
-      plate.unnest()
-
-      hiparse(i + 1, column + 1, curh :: pheader)
-    } else if (c == row1) {
-      if (row2 == '\u0000') {
-        this.header = pheader.reverse.toArray
-        plate.finishRow()
-        parse(i + 1, 0)
-      } else if ((byte(i + 1) & 0xff) == row2) {
-        this.header = pheader.reverse.toArray
-        plate.finishRow()
-        parse(i + 2, 0)
-      } else {
-        val curh = asHeader(column)
-        val str = parseRecordUnquoted(i)    // consume first, so we get the AsyncException if relevant
-        plate.nestMap(curh)
-        plate.str(str)
-        plate.unnest()
-        hiparse(curr, column + 1, curh :: pheader)
-      }
-    } else if (c == openQuote) {
-      val curh = asHeader(column)
-      val str = parseRecordQuoted(i + 1)    // consume first, so we get the AsyncException if relevant
-      plate.nestMap(curh)
-      plate.str(str)
-      plate.unnest()
-      hiparse(curr, column + 1, curh :: pheader)
-    } else {
-      val curh = asHeader(column)
-      val str = parseRecordUnquoted(i)    // consume first, so we get the AsyncException if relevant
-      plate.nestMap(curh)
-      plate.str(str)
-      plate.unnest()
-      hiparse(curr, column + 1, curh :: pheader)
+  private[this] final def checkHeader(column: Int): Unit = {
+    if (column >= header.length) {
+      val old = header
+      header = new Array[CharSequence](old.length * 2)
+      System.arraycopy(header, 0, old, 0, old.length)
     }
   }
 
@@ -323,6 +485,11 @@ final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser
 
     new String(back)
   }
+
+  @inline
+  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+  private[this] final def atEndOfRow(column: Int): Boolean =
+    column == headerMax
 }
 
 object Parser {
