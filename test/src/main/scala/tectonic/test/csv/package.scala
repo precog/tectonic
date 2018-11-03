@@ -38,7 +38,7 @@ package object csv {
   @SuppressWarnings(Array("org.wartremover.warts.ImplicitParameter"))
   def parseAs(expected: Event*)(implicit config: Parser.Config): Matcher[String] = { input: String =>
     val resultsF = for {
-      parser <- Parser[IO](new ReifiedTerminalPlate, config)
+      parser <- Parser(ReifiedTerminalPlate[IO], config)
       left <- parser.absorb(input)
       right <- parser.finish
     } yield (left, right)
@@ -59,7 +59,7 @@ package object csv {
   @SuppressWarnings(Array("org.wartremover.warts.ImplicitParameter"))
   def failParseWithError(errorPF: PartialFunction[ParseException, Result])(implicit config: Parser.Config): Matcher[String] = { input: String =>
     val resultsF = for {
-      parser <- Parser[IO](new ReifiedTerminalPlate, config)
+      parser <- Parser(ReifiedTerminalPlate[IO], config)
       left <- parser.absorb(input)
       right <- parser.finish
     } yield left.flatMap(xs => right.map(xs ::: _))

@@ -85,7 +85,7 @@ class ParserBenchmarks {
     val inputMode = input.substring(modeStart + 1, input.length - 1) == "wrapped"
     val inputFile = input.substring(0, modeStart - 1)
 
-    val plate = new BlackholePlate(
+    val plateF = BlackholePlate[IO](
       Tectonic.VectorCost,
       Tectonic.ScalarCost,
       Tectonic.TinyScalarCost,
@@ -107,7 +107,7 @@ class ParserBenchmarks {
 
     val processed = if (framework == TectonicFramework) {
       val mode = if (inputMode) Parser.UnwrapArray else Parser.ValueStream
-      val parser = StreamParser(Parser[IO](plate, mode): IO[BaseParser[IO, List[Nothing]]])(
+      val parser = StreamParser(Parser(plateF, mode): IO[BaseParser[IO, List[Nothing]]])(
         _ => Chunk.empty[Nothing],
         _ => Chunk.empty[Nothing])
       contents.through(parser)

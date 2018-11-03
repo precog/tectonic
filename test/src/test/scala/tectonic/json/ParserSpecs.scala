@@ -132,7 +132,7 @@ object ParserSpecs extends Specification {
     "call finishBatch with false, and then true on complete value" in {
       val calls = new mutable.ListBuffer[Boolean]
 
-      val parser = Parser[IO](new Plate[Unit] {
+      val parser = Parser(IO(new Plate[Unit] {
         def nul(): Signal = Signal.Continue
         def fls(): Signal = Signal.Continue
         def tru(): Signal = Signal.Continue
@@ -149,7 +149,7 @@ object ParserSpecs extends Specification {
 
         def finishRow(): Unit = ()
         def finishBatch(terminal: Boolean): Unit = calls += terminal
-      }, Parser.ValueStream).unsafeRunSync()
+      }), Parser.ValueStream).unsafeRunSync()
 
       parser.absorb("42").unsafeRunSync() must beRight(())
       calls.toList mustEqual List(false)
@@ -161,7 +161,7 @@ object ParserSpecs extends Specification {
     "call finishBatch with false, and then true on incomplete value" in {
       val calls = new mutable.ListBuffer[Boolean]
 
-      val parser = Parser[IO](new Plate[Unit] {
+      val parser = Parser(IO(new Plate[Unit] {
         def nul(): Signal = Signal.Continue
         def fls(): Signal = Signal.Continue
         def tru(): Signal = Signal.Continue
@@ -178,7 +178,7 @@ object ParserSpecs extends Specification {
 
         def finishRow(): Unit = ()
         def finishBatch(terminal: Boolean): Unit = calls += terminal
-      }, Parser.ValueStream).unsafeRunSync()
+      }), Parser.ValueStream).unsafeRunSync()
 
       parser.absorb("\"h").unsafeRunSync() must beRight(())
       calls.toList mustEqual List(false)

@@ -70,7 +70,6 @@ object StreamParser {
       }
 
       val finishF = covaryErr(parser.finish).rethrow.map(oneChunk)
-
       init ++ Stream.evalUnChunk(finishF)
     }
   }

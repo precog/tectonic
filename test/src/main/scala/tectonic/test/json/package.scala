@@ -38,7 +38,7 @@ package object json {
 
   def parseAs(expected: Event*): Matcher[String] = { input: String =>
     val resultsF = for {
-      parser <- Parser[IO](new ReifiedTerminalPlate, Parser.ValueStream)
+      parser <- Parser(ReifiedTerminalPlate[IO], Parser.ValueStream)
       left <- parser.absorb(input)
       right <- parser.finish
     } yield (left, right)

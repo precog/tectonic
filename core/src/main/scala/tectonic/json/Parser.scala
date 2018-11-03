@@ -44,6 +44,7 @@ package json
  */
 
 import cats.effect.Sync
+import cats.syntax.all._
 
 import tectonic.util.{BList, CharBuilder}
 
@@ -863,13 +864,11 @@ object Parser {
     Array(
       "org.wartremover.warts.DefaultArguments",
       "org.wartremover.warts.Null"))
-  def apply[F[_]]: PartiallyApplied[F] =
-    new PartiallyApplied[F]
-
-  final class PartiallyApplied[F[_]] {
-    def apply[A](plate: Plate[A], mode: Mode = SingleValue)(implicit F: Sync[F]): F[Parser[F, A]] =
-      F.delay(new Parser(plate, state = mode.start,
+  def apply[F[_]: Sync, A](plateF: F[Plate[A]], mode: Mode = SingleValue) : F[Parser[F, A]] = {
+    plateF flatMap { plate =>
+      Sync[F].delay(new Parser(plate, state = mode.start,
         ring = 0L, roffset = -1, fallback = null,
         streamMode = mode.value))
+    }
   }
 }

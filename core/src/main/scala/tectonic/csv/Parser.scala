@@ -18,6 +18,7 @@ package tectonic
 package csv
 
 import cats.effect.Sync
+import cats.syntax.all._
 
 import tectonic.util.CharBuilder
 
@@ -500,12 +501,10 @@ final class Parser[F[_], A](plate: Plate[A], config: Parser.Config) extends Base
 
 object Parser {
 
-  def apply[F[_]]: PartiallyApplied[F] =
-    new PartiallyApplied[F]
-
-  final class PartiallyApplied[F[_]] {
-    def apply[A](plate: Plate[A], config: Config)(implicit F: Sync[F]): F[Parser[F, A]] =
-      F.delay(new Parser[F, A](plate, config))
+  def apply[F[_]: Sync, A](plateF: F[Plate[A]], config: Config): F[Parser[F, A]] = {
+    plateF flatMap { plate =>
+      Sync[F].delay(new Parser[F, A](plate, config))
+    }
   }
 
   // defaults to Excel-style with Windows newlines

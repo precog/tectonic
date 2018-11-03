@@ -115,11 +115,11 @@ abstract class BaseParser[F[_], A] {
 
   @SuppressWarnings(Array("org.wartremover.warts.Overloading"))
   final def absorb(bytes: Array[Byte])(implicit F: Sync[F]): F[Either[ParseException, A]] =
-    absorb(ByteBuffer.wrap(bytes))
+    F.suspend(absorb(ByteBuffer.wrap(bytes)))
 
   @SuppressWarnings(Array("org.wartremover.warts.Overloading"))
   final def absorb(s: String)(implicit F: Sync[F]): F[Either[ParseException, A]] =
-    absorb(ByteBuffer.wrap(s.getBytes(BaseParser.Utf8)))
+    F.suspend(absorb(ByteBuffer.wrap(s.getBytes(BaseParser.Utf8))))
 
   protected[this] final def unsafeData(): Array[Byte] = data
   protected[this] final def unsafeLen(): Int = len
