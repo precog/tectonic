@@ -25,9 +25,9 @@ import cats.effect.IO
 import tectonic.json.Parser
 import tectonic.fs2.StreamParser
 
-// assuming MyPlate extends Plate[Foo]
+// assuming MyPlate.apply[F[_]] returns an F[Plate[A]]
 val parserF = 
-  IO(Parser(new MyPlate, Parser.ValueStream)) // assuming whitespace-delimited json
+  Parser(MyPlate[IO], Parser.ValueStream)) // assuming whitespace-delimited json
 
 val input: Stream[IO, Byte] = ...
 input.through(StreamParser(parserF))    // => Stream[IO, Foo]
