@@ -164,4 +164,50 @@ object ParserSpecs extends Specification {
         NestMap("C"), Str("r3c3"), Unnest, FinishRow)
     }
   }
+
+  "error reporting" should {
+    implicit val c = Parser.Config(row1 = '\n', row2 = 0)
+
+    "disallow empty headers" in {
+      "abc,,def" must failParseWithError {
+        case ParseException(msg, _, _, _) =>
+          msg must startWith("empty header cell")
+      }
+    }
+
+    "disallow empty quoted headers" in {
+      "abc,\"\",def" must failParseWithError {
+        case ParseException(msg, _, _, _) =>
+          msg must startWith("empty header cell")
+      }
+    }
+
+    "catch EOF in header" in {
+      "abc,def" must failParseWithError {
+        case ParseException(msg, _, _, _) =>
+          msg must startWith("unexpected end of file in header row")
+      }
+    }
+
+    "catch missing records at EOF" in {
+      "abc,def\nfoo" must failParseWithError {
+        case ParseException(msg, _, _, _) =>
+          msg must startWith("unexpected end of file: missing records")
+      }
+    }
+
+    "detect unexpected trailing characters" in {
+      "abc\n\"def\"derp\n" must failParseWithError {
+        case ParseException(msg, _, _, _) =>
+          msg must startWith("unexpected character found at record boundary")
+      }
+    }
+
+    "detect unclosed quoting" in {
+      "foo\n\"abc" must failParseWithError {
+        case ParseException(msg, _, _, _) =>
+          msg must startWith("unexpected end of file: unclosed quoted record")
+      }
+    }
+  }
 }

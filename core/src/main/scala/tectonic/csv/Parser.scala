@@ -284,7 +284,7 @@ final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser
       }
     }
 
-    error("impossible")
+    die(j - 1, "unexpected end of file: unclosed quoted record")
   }
 
   @tailrec
@@ -317,7 +317,7 @@ final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser
 
         if (c == record) {
           if (inHeader) {
-            die(i, "illegal empty header cell")
+            die(i, "empty header cell")
           }
 
           if (inferring) {
@@ -332,7 +332,7 @@ final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser
         } else if (c == row1) {
           if (row2 == 0) {
             if (inHeader) {
-              die(i, "illegal empty header cell")
+              die(i, "empty header cell")
             }
 
             if (inferring) {
@@ -352,7 +352,7 @@ final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser
             }
           } else if ((byte(i + 1) & 0xff) == row2) {
             if (inHeader) {
-              die(i, "illegal empty header cell")
+              die(i, "empty header cell")
             }
 
             if (inferring) {
@@ -391,6 +391,10 @@ final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser
           val str = parseRecordQuoted(i + 1)    // consume first, so we get the AsyncException if relevant
 
           if (inHeader) {
+            if (str.length == 0) {
+              die(i, "empty header cell")
+            }
+
             header(column) = str
           } else {
             if (inferring) {

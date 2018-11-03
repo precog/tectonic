@@ -17,11 +17,12 @@
 package tectonic
 package test
 
+import org.specs2.execute.Result
 import org.specs2.matcher.{Matcher, MatchersImplicits}
 
 import tectonic.csv.Parser
 
-import scala.{Array, StringContext}
+import scala.{Array, PartialFunction, StringContext}
 import scala.util.{Left, Right}
 
 import java.lang.{String, SuppressWarnings}
@@ -48,4 +49,22 @@ package object csv {
         (false, s"failed to parse with error '${err.getMessage}' at ${err.line}:${err.col} (i=${err.index})")
     }
   }
+
+  @SuppressWarnings(Array("org.wartremover.warts.ImplicitParameter"))
+  def failParseWithError(errorPF: PartialFunction[ParseException, Result])(implicit config: Parser.Config): Matcher[String] = { input: String =>
+    val parser = Parser(new ReifiedTerminalPlate, config)
+
+    parser.absorb(input).flatMap(xs => parser.finish().map(xs ::: _)) match {
+      case Left(e) if errorPF.isDefinedAt(e) =>
+        val r = errorPF(e)
+        (r.isSuccess, r.message)
+
+      case Left(e) =>
+        (false, s"parsed to an error, but $e was unmatched by the specified pattern")
+
+      case Right(results) =>
+        (false, s"expected error on input '$input', but successfully parsed as $results")
+    }
+  }
+
 }
