@@ -17,7 +17,9 @@
 package tectonic
 package fs2
 
+import cats.Functor
 import cats.effect.Sync
+import cats.evidence.As
 import cats.syntax.all._
 
 import _root_.fs2.{Chunk, Pipe, Stream}
@@ -37,24 +39,24 @@ object StreamParser {
    */
   @SuppressWarnings(Array("org.wartremover.warts.Throw"))
   def apply[F[_]: Sync, A](
-      parserF: F[BaseParser[Chunk[A]]])
+      parserF: F[BaseParser[F, Chunk[A]]])
       : Pipe[F, Byte, A] = { s =>
 
     Stream.eval(parserF) flatMap { parser =>
       val init = s.chunks flatMap { chunk =>
         val listF = chunk match {
           case chunk: Chunk.ByteBuffer =>
-            Sync[F].delay(parser.absorb(chunk.buf): Either[Throwable, Chunk[A]]).rethrow.map(List(_))
+            covaryErr(parser.absorb(chunk.buf)).rethrow.map(List(_))
 
           case Chunk.ByteVectorChunk(bv) =>
-            Sync[F] delay {
-              bv.foldLeftBB(List[Chunk[A]]()) { (acc, buf) =>
-                parser.absorb(buf).fold(throw _, _ :: acc)
+            bv.foldLeftBB(List[Chunk[A]]().pure[F]) { (accF, buf) =>
+              accF flatMap { acc =>
+                covaryErr(parser.absorb(buf)).rethrow.map(_ :: acc)
               }
             }
 
           case chunk =>
-            Sync[F].delay(parser.absorb(chunk.toByteBuffer): Either[Throwable, Chunk[A]]).rethrow.map(List(_))
+            covaryErr(parser.absorb(chunk.toByteBuffer)).rethrow.map(List(_))
         }
 
         val chunkF = listF map { cs =>
@@ -73,7 +75,7 @@ object StreamParser {
         Stream.evalUnChunk(chunkF)
       }
 
-      val finishF = Sync[F].delay(parser.finish(): Either[Throwable, Chunk[A]]).rethrow map { ca =>
+      val finishF = covaryErr(parser.finish).rethrow map { ca =>
         val buffer = new mutable.ListBuffer[A]
         ca.foldLeft(()) { (_, a) =>
           val _ = buffer += a
@@ -85,4 +87,10 @@ object StreamParser {
       init ++ Stream.evalUnChunk(finishF)
     }
   }
+
+  private[this] def covaryErr[F[_]: Functor, T, A](
+      fea: F[Either[T, A]])(
+      implicit ev: T As Throwable)
+      : F[Either[Throwable, A]] =
+    fea.map(_.left.map(ev.coerce(_)))
 }

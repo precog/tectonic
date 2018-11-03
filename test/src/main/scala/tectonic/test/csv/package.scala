@@ -17,6 +17,8 @@
 package tectonic
 package test
 
+import cats.effect.IO
+
 import org.specs2.execute.Result
 import org.specs2.matcher.{Matcher, MatchersImplicits}
 
@@ -35,9 +37,13 @@ package object csv {
 
   @SuppressWarnings(Array("org.wartremover.warts.ImplicitParameter"))
   def parseAs(expected: Event*)(implicit config: Parser.Config): Matcher[String] = { input: String =>
-    val parser = Parser(new ReifiedTerminalPlate, config)
+    val resultsF = for {
+      parser <- Parser[IO](new ReifiedTerminalPlate, config)
+      left <- parser.absorb(input)
+      right <- parser.finish
+    } yield (left, right)
 
-    (parser.absorb(input), parser.finish()) match {
+    resultsF.unsafeRunSync() match {
       case (Right(init), Right(tail)) =>
         val results = init ++ tail
         (results == expected.toList, s"$results != ${expected.toList}")
@@ -52,9 +58,13 @@ package object csv {
 
   @SuppressWarnings(Array("org.wartremover.warts.ImplicitParameter"))
   def failParseWithError(errorPF: PartialFunction[ParseException, Result])(implicit config: Parser.Config): Matcher[String] = { input: String =>
-    val parser = Parser(new ReifiedTerminalPlate, config)
+    val resultsF = for {
+      parser <- Parser[IO](new ReifiedTerminalPlate, config)
+      left <- parser.absorb(input)
+      right <- parser.finish
+    } yield left.flatMap(xs => right.map(xs ::: _))
 
-    parser.absorb(input).flatMap(xs => parser.finish().map(xs ::: _)) match {
+    resultsF.unsafeRunSync() match {
       case Left(e) if errorPF.isDefinedAt(e) =>
         val r = errorPF(e)
         (r.isSuccess, r.message)

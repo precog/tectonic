@@ -105,7 +105,7 @@ class ParserBenchmarks {
 
     val processed = if (framework == TectonicFramework) {
       val mode = if (inputMode) Parser.UnwrapArray else Parser.ValueStream
-      contents.through(StreamParser[IO, Nothing](IO(Parser(plate, mode))))
+      contents.through(StreamParser[IO, Nothing](Parser[IO](plate, mode)))
     } else {
       if (inputMode)
         contents.chunks.unwrapJsonArray

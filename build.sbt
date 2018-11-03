@@ -23,7 +23,9 @@ lazy val core = project
   .settings(name := "tectonic")
   .settings(
     performMavenCentralSync := false,
-    publishAsOSSProject := true)
+    publishAsOSSProject := true,
+
+    libraryDependencies += "org.typelevel" %% "cats-effect" % "1.0.0")
   .enablePlugins(AutomateHeaderPlugin)
 
 lazy val fs2 = project

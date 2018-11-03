@@ -17,6 +17,8 @@
 package tectonic
 package json
 
+import cats.effect.IO
+
 import org.specs2.mutable.Specification
 
 import tectonic.test.Event
@@ -130,7 +132,7 @@ object ParserSpecs extends Specification {
     "call finishBatch with false, and then true on complete value" in {
       val calls = new mutable.ListBuffer[Boolean]
 
-      val parser = Parser(new Plate[Unit] {
+      val parser = Parser[IO](new Plate[Unit] {
         def nul(): Signal = Signal.Continue
         def fls(): Signal = Signal.Continue
         def tru(): Signal = Signal.Continue
@@ -147,19 +149,19 @@ object ParserSpecs extends Specification {
 
         def finishRow(): Unit = ()
         def finishBatch(terminal: Boolean): Unit = calls += terminal
-      }, Parser.ValueStream)
+      }, Parser.ValueStream).unsafeRunSync()
 
-      parser.absorb("42") must beRight(())
+      parser.absorb("42").unsafeRunSync() must beRight(())
       calls.toList mustEqual List(false)
 
-      parser.finish() must beRight(())
+      parser.finish.unsafeRunSync() must beRight(())
       calls.toList mustEqual List(false, true)
     }
 
     "call finishBatch with false, and then true on incomplete value" in {
       val calls = new mutable.ListBuffer[Boolean]
 
-      val parser = Parser(new Plate[Unit] {
+      val parser = Parser[IO](new Plate[Unit] {
         def nul(): Signal = Signal.Continue
         def fls(): Signal = Signal.Continue
         def tru(): Signal = Signal.Continue
@@ -176,15 +178,15 @@ object ParserSpecs extends Specification {
 
         def finishRow(): Unit = ()
         def finishBatch(terminal: Boolean): Unit = calls += terminal
-      }, Parser.ValueStream)
+      }, Parser.ValueStream).unsafeRunSync()
 
-      parser.absorb("\"h") must beRight(())
+      parser.absorb("\"h").unsafeRunSync() must beRight(())
       calls.toList mustEqual List(false)
 
-      parser.absorb("i\"") must beRight(())
+      parser.absorb("i\"").unsafeRunSync() must beRight(())
       calls.toList mustEqual List(false, false)
 
-      parser.finish() must beRight(())
+      parser.finish.unsafeRunSync() must beRight(())
       calls.toList mustEqual List(false, false, true)
     }
 
