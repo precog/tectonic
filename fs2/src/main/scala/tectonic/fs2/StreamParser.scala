@@ -17,9 +17,10 @@
 package tectonic
 package fs2
 
-import cats.Functor
+import cats.{Foldable, Functor}
 import cats.effect.Sync
 import cats.evidence.As
+import cats.instances.list._
 import cats.syntax.all._
 
 import _root_.fs2.{Chunk, Pipe, Stream}
@@ -37,55 +38,51 @@ object StreamParser {
    * parser, which may be constructed effectfully. Any parse errors will be sequenced
    * into the stream as a `tectonic.ParseException`, halting consumption.
    */
-  @SuppressWarnings(Array("org.wartremover.warts.Throw"))
-  def apply[F[_]: Sync, A](
-      parserF: F[BaseParser[F, Chunk[A]]])
-      : Pipe[F, Byte, A] = { s =>
+  @SuppressWarnings(Array(
+    "org.wartremover.warts.NonUnitStatements",
+    "org.wartremover.warts.Throw"))
+  def apply[F[_]: Sync, A, B](
+      parserF: F[BaseParser[F, A]])(
+      oneChunk: A => Chunk[B],
+      manyChunk: List[A] => Chunk[B])
+      : Pipe[F, Byte, B] = { s =>
 
     Stream.eval(parserF) flatMap { parser =>
       val init = s.chunks flatMap { chunk =>
-        val listF = chunk match {
+        val chunkF = chunk match {
           case chunk: Chunk.ByteBuffer =>
-            covaryErr(parser.absorb(chunk.buf)).rethrow.map(List(_))
+            covaryErr(parser.absorb(chunk.buf)).rethrow.map(oneChunk)
 
           case Chunk.ByteVectorChunk(bv) =>
-            bv.foldLeftBB(List[Chunk[A]]().pure[F]) { (accF, buf) =>
+            val manyF = bv.foldLeftBB(Sync[F].delay(new mutable.ListBuffer[A])) { (accF, buf) =>
               accF flatMap { acc =>
-                covaryErr(parser.absorb(buf)).rethrow.map(_ :: acc)
+                covaryErr(parser.absorb(buf)).rethrow.map(acc += _)
               }
             }
 
+            manyF.map(m => manyChunk(m.toList))
+
           case chunk =>
-            covaryErr(parser.absorb(chunk.toByteBuffer)).rethrow.map(List(_))
-        }
-
-        val chunkF = listF map { cs =>
-          val buffer = new mutable.ListBuffer[A]
-
-          cs.foldRight(()) { (c, _) =>
-            c.foldLeft(()) { (_, a) =>
-              val _ = buffer += a
-              ()
-            }
-          }
-
-          Chunk.seq(buffer.toList)
+            covaryErr(parser.absorb(chunk.toByteBuffer)).rethrow.map(oneChunk)
         }
 
         Stream.evalUnChunk(chunkF)
       }
 
-      val finishF = covaryErr(parser.finish).rethrow map { ca =>
-        val buffer = new mutable.ListBuffer[A]
-        ca.foldLeft(()) { (_, a) =>
-          val _ = buffer += a
-          ()
-        }
-        Chunk.seq(buffer.toList)
-      }
+      val finishF = covaryErr(parser.finish).rethrow.map(oneChunk)
 
       init ++ Stream.evalUnChunk(finishF)
     }
+  }
+
+  def foldable[F[_]: Sync, G[_]: Foldable, A](parserF: F[BaseParser[F, G[A]]]): Pipe[F, Byte, A] = {
+    def oneChunk(ga: G[A]): Chunk[A] =
+      Chunk.buffer(ga.foldLeft(new mutable.ArrayBuffer[A])(_ += _))
+
+    def manyChunk(lga: List[G[A]]): Chunk[A] =
+      Chunk.buffer(Foldable[List].compose[G].foldLeft(lga, new mutable.ArrayBuffer[A])(_ += _))
+
+    apply(parserF)(oneChunk, manyChunk)
   }
 
   private[this] def covaryErr[F[_]: Functor, T, A](
