@@ -125,6 +125,14 @@ object ParserSpecs extends Specification {
 
       "\"fubar\"" must parseAs(NestMap("A"), Str("fubar"), Unnest, FinishRow)
     }
+
+    "deal with doubled row delimiter sequence" in {
+      "foo\r\n\r\n" must parseAs(NestMap("foo"), Str(""), Unnest, FinishRow)
+    }
+
+    "allow row delimiter sequence in quoted record" in {
+      "a\r\n\"fu\r\nbar\"\r\n" must parseAs(NestMap("a"), Str("fu\r\nbar"), Unnest, FinishRow)
+    }
   }
 
   "excel-style with unix newlines" should {
@@ -205,6 +213,13 @@ object ParserSpecs extends Specification {
 
     "detect unclosed quoting" in {
       "foo\n\"abc" must failParseWithError {
+        case ParseException(msg, _, _, _) =>
+          msg must startWith("unexpected end of file: unclosed quoted record")
+      }
+    }
+
+    "detect unclosed quoting after escaped close" in {
+      "abc\n\"def\"\"derp\n" must failParseWithError {
         case ParseException(msg, _, _, _) =>
           msg must startWith("unexpected end of file: unclosed quoted record")
       }
