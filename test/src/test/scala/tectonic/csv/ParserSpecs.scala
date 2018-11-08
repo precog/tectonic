@@ -34,7 +34,7 @@ object ParserSpecs extends Specification {
       "abc\r\nfubar\r\n" must parseAs(NestMap("abc"), Str("fubar"), Unnest, FinishRow)
     }
 
-    "parse three values across two columns" in {
+    "parse three values across three columns" in {
       val input = "a,b,c\r\nr1c1,r1c2,r1c3\r\nr2c1,r2c2,r2c3\r\nr3c1,r3c2,r3c3\r\n"
       input must parseAs(
         NestMap("a"), Str("r1c1"), Unnest,
@@ -134,7 +134,7 @@ object ParserSpecs extends Specification {
       "abc\nfubar\n" must parseAs(NestMap("abc"), Str("fubar"), Unnest, FinishRow)
     }
 
-    "parse three values across two columns" in {
+    "parse three values across three columns" in {
       val input = "a,b,c\nr1c1,r1c2,r1c3\nr2c1,r2c2,r2c3\nr3c1,r3c2,r3c3\n"
       input must parseAs(
         NestMap("a"), Str("r1c1"), Unnest,
