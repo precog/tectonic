@@ -36,6 +36,16 @@ lazy val fs2 = project
     libraryDependencies += "co.fs2" %% "fs2-core" % Fs2Version)
   .enablePlugins(AutomateHeaderPlugin)
 
+lazy val harness = project
+  .in(file("harness"))
+  .dependsOn(
+    fs2)
+  .settings(name := "tectonic-harness")
+  .settings(noPublishSettings)    // mostly for internal testing
+  .settings(
+    libraryDependencies += "co.fs2" %% "fs2-io" % Fs2Version)
+  .enablePlugins(AutomateHeaderPlugin)
+
 lazy val test = project
   .in(file("test"))
   .dependsOn(core)
