@@ -17,6 +17,9 @@
 package tectonic
 package csv
 
+import cats.effect.Sync
+import cats.syntax.all._
+
 import tectonic.util.CharBuilder
 
 import scala.{inline, Array, Boolean, Byte, Char, Int, Nothing, Unit}
@@ -31,7 +34,7 @@ import java.lang.{CharSequence, String, SuppressWarnings, System}
       "org.wartremover.warts.FinalVal",
       "org.wartremover.warts.Null",
       "org.wartremover.warts.PublicInference"))
-final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser[A] {
+final class Parser[F[_], A](plate: Plate[A], config: Parser.Config) extends BaseParser[F, A] {
 
   /*
    * The state is a three-bit value representing the parsing of
@@ -498,8 +501,11 @@ final class Parser[A](plate: Plate[A], config: Parser.Config) extends BaseParser
 
 object Parser {
 
-  def apply[A](plate: Plate[A], config: Config): Parser[A] =
-    new Parser[A](plate, config)
+  def apply[F[_]: Sync, A](plateF: F[Plate[A]], config: Config): F[Parser[F, A]] = {
+    plateF flatMap { plate =>
+      Sync[F].delay(new Parser[F, A](plate, config))
+    }
+  }
 
   // defaults to Excel-style with Windows newlines
   @SuppressWarnings(Array("org.wartremover.warts.DefaultArguments"))

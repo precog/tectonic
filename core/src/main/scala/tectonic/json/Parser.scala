@@ -43,6 +43,9 @@ package json
  * kDEALINGS IN THE SOFTWARE.
  */
 
+import cats.effect.Sync
+import cats.syntax.all._
+
 import tectonic.util.{BList, CharBuilder}
 
 import scala.{
@@ -105,14 +108,14 @@ import java.lang.{CharSequence, IndexOutOfBoundsException, SuppressWarnings}
     "org.wartremover.warts.Var",
     "org.wartremover.warts.FinalVal",
     "org.wartremover.warts.PublicInference"))   // needed due to bug in WartRemover
-final class Parser[A] private (
+final class Parser[F[_], A] private (
     plate: Plate[A],
     private[this] var state: Int,
     private[this] var ring: Long,
     private[this] var roffset: Int,
     private[this] var fallback: BList,
     private[this] var streamMode: Int)
-    extends BaseParser[A] {
+    extends BaseParser[F, A] {
 
   /**
    * Explanation of the new synthetic states. The parser machinery
@@ -861,8 +864,11 @@ object Parser {
     Array(
       "org.wartremover.warts.DefaultArguments",
       "org.wartremover.warts.Null"))
-  def apply[A](plate: Plate[A], mode: Mode = SingleValue): Parser[A] =
-    new Parser(plate, state = mode.start,
-      ring = 0L, roffset = -1, fallback = null,
-      streamMode = mode.value)
+  def apply[F[_]: Sync, A](plateF: F[Plate[A]], mode: Mode = SingleValue) : F[Parser[F, A]] = {
+    plateF flatMap { plate =>
+      Sync[F].delay(new Parser(plate, state = mode.start,
+        ring = 0L, roffset = -1, fallback = null,
+        streamMode = mode.value))
+    }
+  }
 }

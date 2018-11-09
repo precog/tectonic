@@ -23,6 +23,7 @@ lazy val root = project
 lazy val core = project
   .in(file("core"))
   .settings(name := "tectonic")
+  .settings(libraryDependencies += "org.typelevel" %% "cats-effect" % "1.0.0")
   .enablePlugins(AutomateHeaderPlugin)
 
 lazy val fs2 = project
