@@ -62,23 +62,6 @@ import scala.annotation.{switch, tailrec}
 
 import java.lang.{CharSequence, IndexOutOfBoundsException, SuppressWarnings}
 
-object Parser {
-
-  sealed abstract class Mode(val start: Int, val value: Int)
-  case object UnwrapArray extends Mode(-5, 1)
-  case object ValueStream extends Mode(-1, 0)
-  case object SingleValue extends Mode(-1, -1)
-
-  @SuppressWarnings(
-    Array(
-      "org.wartremover.warts.DefaultArguments",
-      "org.wartremover.warts.Null"))
-  def apply[A](plate: Plate[A], mode: Mode = SingleValue): Parser[A] =
-    new Parser(plate, state = mode.start,
-      ring = 0L, roffset = -1, fallback = null,
-      streamMode = mode.value)
-}
-
 /**
  * Parser is able to parse chunks of data (encoded as
  * Option[ByteBuffer] instances) and parse asynchronously. You can
@@ -266,7 +249,7 @@ final class Parser[A] private (
       }
       Right(plate.finishBatch(false))
     } catch {
-      case e: AsyncException =>
+      case AsyncException =>
         if (done) {
           // if we are done, make sure we ended at a good stopping point
           if (state == ASYNC_PREVAL || state == ASYNC_END) Right(plate.finishBatch(true))
@@ -865,4 +848,21 @@ final class Parser[A] private (
     else
       fallback.asInstanceOf[BList.Cons].tail
   }
+}
+
+object Parser {
+
+  sealed abstract class Mode(val start: Int, val value: Int)
+  case object UnwrapArray extends Mode(-5, 1)
+  case object ValueStream extends Mode(-1, 0)
+  case object SingleValue extends Mode(-1, -1)
+
+  @SuppressWarnings(
+    Array(
+      "org.wartremover.warts.DefaultArguments",
+      "org.wartremover.warts.Null"))
+  def apply[A](plate: Plate[A], mode: Mode = SingleValue): Parser[A] =
+    new Parser(plate, state = mode.start,
+      ring = 0L, roffset = -1, fallback = null,
+      streamMode = mode.value)
 }

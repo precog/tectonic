@@ -119,6 +119,8 @@ abstract class BaseParser[A] {
   final def absorb(s: String): Either[ParseException, A] =
     absorb(ByteBuffer.wrap(s.getBytes(BaseParser.Utf8)))
 
+  protected[this] final def unsafeData(): Array[Byte] = data
+  protected[this] final def unsafeLen(): Int = len
 
   /**
    * This is a specialized accessor for the case where our underlying data are
@@ -126,7 +128,7 @@ abstract class BaseParser[A] {
    */
   @SuppressWarnings(Array("org.wartremover.warts.Throw"))
   protected[this] final def byte(i: Int): Byte =
-    if (i >= len) throw new AsyncException else data(i)
+    if (i >= len) throw AsyncException else data(i)
 
   // we need to signal if we got out-of-bounds
   @SuppressWarnings(
@@ -134,7 +136,7 @@ abstract class BaseParser[A] {
       "org.wartremover.warts.Throw",
       "org.wartremover.warts.Overloading"))
   protected[this] final def at(i: Int): Char =
-    if (i >= len) throw new AsyncException else data(i).toChar
+    if (i >= len) throw AsyncException else data(i).toChar
 
   /**
    * Access a byte range as a string.
@@ -148,7 +150,7 @@ abstract class BaseParser[A] {
       "org.wartremover.warts.Throw",
       "org.wartremover.warts.Overloading"))
   protected[this] final def at(i: Int, k: Int): CharSequence = {
-    if (k > len) throw new AsyncException
+    if (k > len) throw AsyncException
     val size = k - i
     val arr = new Array[Byte](size)
     System.arraycopy(data, i, arr, 0, size)
