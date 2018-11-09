@@ -501,7 +501,7 @@ final class Parser[F[_], A](plate: Plate[A], config: Parser.Config) extends Base
 
 object Parser {
 
-  def apply[F[_]: Sync, A](plateF: F[Plate[A]], config: Config): F[Parser[F, A]] = {
+  def apply[F[_]: Sync, A](plateF: F[Plate[A]], config: Config): F[BaseParser[F, A]] = {
     plateF flatMap { plate =>
       Sync[F].delay(new Parser[F, A](plate, config))
     }
