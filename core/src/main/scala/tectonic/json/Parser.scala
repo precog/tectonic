@@ -864,7 +864,7 @@ object Parser {
     Array(
       "org.wartremover.warts.DefaultArguments",
       "org.wartremover.warts.Null"))
-  def apply[F[_]: Sync, A](plateF: F[Plate[A]], mode: Mode = SingleValue) : F[Parser[F, A]] = {
+  def apply[F[_]: Sync, A](plateF: F[Plate[A]], mode: Mode = SingleValue) : F[BaseParser[F, A]] = {
     plateF flatMap { plate =>
       Sync[F].delay(new Parser(plate, state = mode.start,
         ring = 0L, roffset = -1, fallback = null,
