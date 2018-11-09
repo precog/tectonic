@@ -53,6 +53,7 @@ lazy val benchmarks = project
     scalacStrictMode := false,
     javaOptions += "-XX:+HeapDumpOnOutOfMemoryError",
     javaOptions += s"-Dproject.resource.dir=${(Compile / resourceDirectory).value}",
+    javaOptions += s"-Dproject.managed.resource.dir=${(Jmh / resourceManaged).value}",
 
     libraryDependencies ++= Seq(
       "co.fs2" %% "fs2-core" % Fs2Version,
@@ -65,5 +66,20 @@ lazy val benchmarks = project
     Jmh / dependencyClasspath := (Compile / dependencyClasspath).value,
     Jmh / compile := (Jmh / compile).dependsOn(Compile / compile).value,
     Jmh / run := (Jmh / run).dependsOn(Jmh / compile).evaluated)
+  .settings(
+    Jmh / resourceGenerators += Def.task {
+      import scala.sys.process._
+
+
+      val targetDir = (Jmh / resourceManaged).value
+      val targetFile = targetDir / "worldcitiespop.txt"
+
+      if (!targetFile.exists()) {
+        s"curl -o $targetDir/worldcitiespop.txt.gz http://www.maxmind.com/download/worldcities/worldcitiespop.txt.gz".!!
+        s"gunzip $targetDir/worldcitiespop.txt.gz".!!
+      }
+
+      Seq(targetFile)
+    }.taskValue)
   .enablePlugins(AutomateHeaderPlugin)
   .enablePlugins(JmhPlugin)
