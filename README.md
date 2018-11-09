@@ -1,6 +1,6 @@
 # Tectonic [![Build Status](https://travis-ci.org/slamdata/tectonic.svg?branch=master)](https://travis-ci.org/slamdata/tectonic) [![Bintray](https://img.shields.io/bintray/v/slamdata-inc/maven-public/tectonic.svg)](https://bintray.com/slamdata-inc/maven-public/tectonic) [![Discord](https://img.shields.io/discord/373302030460125185.svg?logo=discord)](https://discord.gg/QNjwCg6)
 
-A columnar fork of [Jawn](https://github.com/non/Jawn). The distinction between "columnar" and its asymmetric opposite, "row-oriented", is in the orientation of data structures which you are expected to create in response to the event stream. Jawn expects a single, self-contained value with internal recursive structure per row, and its `Facade` trait is designed around this idea. Tectonic expects many rows to be combined into a much larger batch with a flat internal structure, and the `Plate` class is designed around this idea.
+A columnar fork of [Jawn](https://github.com/non/Jawn) with added backend support for CSV. The distinction between "columnar" and its asymmetric opposite, "row-oriented", is in the orientation of data structures which you are expected to create in response to the event stream. Jawn expects a single, self-contained value with internal recursive structure per row, and its `Facade` trait is designed around this idea. Tectonic expects many rows to be combined into a much larger batch with a flat internal structure, and the `Plate` class is designed around this idea.
 
 Tectonic is also designed to support multiple backends, making it possible to write a parser for any sort of input stream (e.g. CSV, XML, etc) while driving a single `Plate`.
 
@@ -25,15 +25,66 @@ import cats.effect.IO
 import tectonic.json.Parser
 import tectonic.fs2.StreamParser
 
-// assuming MyPlate extends Plate[Foo]
+// assuming MyPlate.apply[F[_]] returns an F[Plate[A]]
 val parserF = 
-  IO(Parser(new MyPlate, Parser.ValueStream)) // assuming whitespace-delimited json
+  Parser(MyPlate[IO], Parser.ValueStream)) // assuming whitespace-delimited json
 
 val input: Stream[IO, Byte] = ...
 input.through(StreamParser(parserF))    // => Stream[IO, Foo]
 ```
 
 Parse errors will be captured by the stream as exceptions.
+
+## Backend Formats
+
+Tectonic supports two formats: JSON and CSV. Each format has a number of different configuration modes which may be defined.
+
+### JSON
+
+There are three modes in which the JSON parser may run:
+
+- Whitespace-Delimited (`Parser.ValueStream`)
+- Array-Wrapped (`Parser.UnwrapArray`)
+- Just One Value (`Parser.SingleValue`)
+
+Whitespace-delimited is very standard when processing very large JSON input streams, where the whitespace is likely to be a newline. "Just One Value" is quite uncommon, since it only applies to scenarios wherein you have a *single* row in the data. Array wrapping is common, but not universal. Any one of these modes may be passed to the parser upon initialization.
+
+### CSV
+
+Similar to the JSON parser, the CSV parser takes its configuration as a parameter. However, the configuration is considerably more complex since there is no standard CSV mode. Delimiters and escaping vary considerably from instance to instance. Some CSV files even fail to include a header indicating field names!
+
+To account for this, the CSV parser accepts a `Config` object wherein all of these values are tunable. The defaults are as follows:
+
+```scala
+final case class Config(
+    header: Boolean = true,
+    record: Byte = ',',
+    row1: Byte = '\r',
+    row2: Byte = '\n',        // if this is unneeded, it should be set to \0
+    openQuote: Byte = '"',    // e.g. “
+    closeQuote: Byte = '"',   // e.g. ”
+    escape: Byte = '"')       // e.g. \\
+```
+
+This roughly corresponds to the CSV style emitted by Microsoft Excel. Almost any values may be used here. The restrictions are as follows:
+
+- `row2` must not equal `closeQuote`
+- `record` must not equal `row1`
+- `row2` may not *validly* be byte value `0`, since that is the indicator for "only use the first row delimiter"
+
+Beyond this, any characters are valid. You will note that, in the Excel defaults, the escape character is in fact the same as the close (and open) quote characters, meaning that quoted values are enclosed in `"`...`"` and interior quote characters are represented by `""`. Backslash (`\`) is also a relatively common choice here.
+
+Just to be clear, if you wish to use a singular `\n` as the row delimiter, you should do something like this:
+
+```scala
+Parser.Config().copy(
+  row1 = '\n',
+  row2 = 0)
+```
+
+If the supplied configuration defines `header = false`, then the inference will follow the same strategy that Excel uses. Namely: `A`, `B`, `C`, ..., `Z`, `AA`, `AB`, ...
+
+When invoking the `Plate`, each CSV record will be represented as a `str(...)` invocation, wrapped in a `nestMap`/`unnest` call, where the corresponding header value is the map key.
 
 ## Performance
 
@@ -98,6 +149,17 @@ The following were run on my laptop in powered mode with networking disabled, 20
 |          jawn |           `qux2.json` |       19.153 | ± 0.119 |
 |  **tectonic** |        `ugh10k.json`  |  **115.467** | ± 0.838 |
 |          jawn |        `ugh10k.json`  |      130.876 | ± 0.972 |
+
+### Row-Counting Benchmark for CSV
+
+Inspired by the [uniVocity benchmarks](https://github.com/uniVocity/csv-parsers-comparison#jdk-8), the Tectonic CSV benchmarks load from the 144 MB [Maxmind worldcities.csv](http://www.maxmind.com/download/worldcities/worldcitiespop.txt.gz) dataset, counting the total number of records. Unfortunately, we were unable to find any other async (streaming) CSV parsers on the JVM, and so the only performance comparison we are able to provide is to the time it takes to count the number of `\n` characters in the same file.
+
+| Test       | Milliseconds | Error    |
+| ---        |          --: | :--      |
+| Parse      | 2023.705     | ± 27.075 |
+| Line Count | 225.589      | ± 4.474  |
+
+The line count test really just serves as a lower-bound on how long it takes fs2-io to read the file contents. Thus, *parsing* as opposed to just *scanning the characters* adds a roughly an order of magnitude in overhead. However, if you compare to the uniVocity benchmarks, which were performed on a more powerful machine and *without* the overhead of fs2, it appears that Tectonic CSV is relatively middle-of-the-road in terms of high performance CSV parsers on the JVM. That's with almost no time spent optimizing (there's plenty of low-hanging fruit) *and* the fact that Tectonic CSV is an async parser, which imposes some meaningful overhead.
 
 ## License
 

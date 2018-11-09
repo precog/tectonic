@@ -17,8 +17,9 @@
 package tectonic
 package fs2
 
-import cats.Foldable
+import cats.{Foldable, Functor}
 import cats.effect.Sync
+import cats.evidence.As
 import cats.instances.list._
 import cats.syntax.all._
 
@@ -41,7 +42,7 @@ object StreamParser {
     "org.wartremover.warts.NonUnitStatements",
     "org.wartremover.warts.Throw"))
   def apply[F[_]: Sync, A, B](
-      parserF: F[BaseParser[A]])(
+      parserF: F[BaseParser[F, A]])(
       oneChunk: A => Chunk[B],
       manyChunk: List[A] => Chunk[B])
       : Pipe[F, Byte, B] = { s =>
@@ -50,38 +51,30 @@ object StreamParser {
       val init = s.chunks flatMap { chunk =>
         val chunkF = chunk match {
           case chunk: Chunk.ByteBuffer =>
-            Sync[F].delay[Either[Throwable, A]](parser.absorb(chunk.buf))
-              .rethrow
-              .map(oneChunk)
+            covaryErr(parser.absorb(chunk.buf)).rethrow.map(oneChunk)
 
           case Chunk.ByteVectorChunk(bv) =>
-            Sync[F] delay {
-              val many = bv.foldLeftBB(new mutable.ListBuffer[A]) { (acc, buf) =>
-                parser.absorb(buf).fold(throw _, acc += _)
+            val manyF = bv.foldLeftBB(Sync[F].delay(new mutable.ListBuffer[A])) { (accF, buf) =>
+              accF flatMap { acc =>
+                covaryErr(parser.absorb(buf)).rethrow.map(acc += _)
               }
-
-              manyChunk(many.toList)
             }
 
+            manyF.map(m => manyChunk(m.toList))
+
           case chunk =>
-            Sync[F].delay[Either[Throwable, A]](parser.absorb(chunk.toByteBuffer))
-              .rethrow
-              .map(oneChunk)
+            covaryErr(parser.absorb(chunk.toByteBuffer)).rethrow.map(oneChunk)
         }
 
         Stream.evalUnChunk(chunkF)
       }
 
-      val finishF =
-        Sync[F].delay[Either[Throwable, A]](parser.finish())
-          .rethrow
-          .map(oneChunk)
-
+      val finishF = covaryErr(parser.finish).rethrow.map(oneChunk)
       init ++ Stream.evalUnChunk(finishF)
     }
   }
 
-  def foldable[F[_]: Sync, G[_]: Foldable, A](parserF: F[BaseParser[G[A]]]): Pipe[F, Byte, A] = {
+  def foldable[F[_]: Sync, G[_]: Foldable, A](parserF: F[BaseParser[F, G[A]]]): Pipe[F, Byte, A] = {
     def oneChunk(ga: G[A]): Chunk[A] =
       Chunk.buffer(ga.foldLeft(new mutable.ArrayBuffer[A])(_ += _))
 
@@ -90,4 +83,10 @@ object StreamParser {
 
     apply(parserF)(oneChunk, manyChunk)
   }
+
+  private[this] def covaryErr[F[_]: Functor, T, A](
+      fea: F[Either[T, A]])(
+      implicit ev: T As Throwable)
+      : F[Either[Throwable, A]] =
+    fea.map(_.left.map(ev.coerce(_)))
 }

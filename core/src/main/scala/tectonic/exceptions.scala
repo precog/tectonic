@@ -28,7 +28,7 @@ final case class IncompleteParseException(msg: String) extends Exception(msg)
  * This class is used internally by Parser to signal that we've
  * reached the end of the particular input we were given.
  */
-private[tectonic] final class AsyncException extends Exception with control.NoStackTrace
+private[tectonic] case object AsyncException extends Exception with control.NoStackTrace
 
 /**
  * This is a more prosaic exception which indicates that we've hit a

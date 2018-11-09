@@ -42,6 +42,8 @@ package tectonic
  * kDEALINGS IN THE SOFTWARE.
  */
 
+import cats.effect.Sync
+
 import scala.{sys, Array, Boolean, Byte, Char, Int, Nothing, Unit}
 import scala.Predef._
 import scala.math.max
@@ -55,7 +57,7 @@ import java.nio.charset.Charset
   Array(
     "org.wartremover.warts.Var",
     "org.wartremover.warts.PublicInference"))
-abstract class BaseParser[A] {
+abstract class BaseParser[F[_], A] {
 
   private[this] var data = new Array[Byte](131072)
   private[this] var len = 0
@@ -82,7 +84,7 @@ abstract class BaseParser[A] {
     Array(
       "org.wartremover.warts.NonUnitStatements",
       "org.wartremover.warts.Overloading"))
-  final def absorb(buf: ByteBuffer): Either[ParseException, A] = {
+  final def absorb(buf: ByteBuffer)(implicit F: Sync[F]): F[Either[ParseException, A]] = F delay {
     done = false
     val buflen = buf.limit() - buf.position()
     val need = len + buflen
@@ -92,7 +94,7 @@ abstract class BaseParser[A] {
     churn()
   }
 
-  final def finish(): Either[ParseException, A] = {
+  final def finish(implicit F: Sync[F]): F[Either[ParseException, A]] = F delay {
     done = true
     churn()
   }
@@ -112,13 +114,15 @@ abstract class BaseParser[A] {
   }
 
   @SuppressWarnings(Array("org.wartremover.warts.Overloading"))
-  final def absorb(bytes: Array[Byte]): Either[ParseException, A] =
-    absorb(ByteBuffer.wrap(bytes))
+  final def absorb(bytes: Array[Byte])(implicit F: Sync[F]): F[Either[ParseException, A]] =
+    F.suspend(absorb(ByteBuffer.wrap(bytes)))
 
   @SuppressWarnings(Array("org.wartremover.warts.Overloading"))
-  final def absorb(s: String): Either[ParseException, A] =
-    absorb(ByteBuffer.wrap(s.getBytes(BaseParser.Utf8)))
+  final def absorb(s: String)(implicit F: Sync[F]): F[Either[ParseException, A]] =
+    F.suspend(absorb(ByteBuffer.wrap(s.getBytes(BaseParser.Utf8))))
 
+  protected[this] final def unsafeData(): Array[Byte] = data
+  protected[this] final def unsafeLen(): Int = len
 
   /**
    * This is a specialized accessor for the case where our underlying data are
@@ -126,7 +130,7 @@ abstract class BaseParser[A] {
    */
   @SuppressWarnings(Array("org.wartremover.warts.Throw"))
   protected[this] final def byte(i: Int): Byte =
-    if (i >= len) throw new AsyncException else data(i)
+    if (i >= len) throw AsyncException else data(i)
 
   // we need to signal if we got out-of-bounds
   @SuppressWarnings(
@@ -134,7 +138,7 @@ abstract class BaseParser[A] {
       "org.wartremover.warts.Throw",
       "org.wartremover.warts.Overloading"))
   protected[this] final def at(i: Int): Char =
-    if (i >= len) throw new AsyncException else data(i).toChar
+    if (i >= len) throw AsyncException else data(i).toChar
 
   /**
    * Access a byte range as a string.
@@ -148,7 +152,7 @@ abstract class BaseParser[A] {
       "org.wartremover.warts.Throw",
       "org.wartremover.warts.Overloading"))
   protected[this] final def at(i: Int, k: Int): CharSequence = {
-    if (k > len) throw new AsyncException
+    if (k > len) throw AsyncException
     val size = k - i
     val arr = new Array[Byte](size)
     System.arraycopy(data, i, arr, 0, size)
