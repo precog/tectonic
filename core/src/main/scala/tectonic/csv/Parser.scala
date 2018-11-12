@@ -80,6 +80,7 @@ final class Parser[F[_], A](plate: Plate[A], config: Parser.Config) extends Base
       "org.wartremover.warts.NonUnitStatements"))
   protected[this] final def churn(): Either[ParseException, A] = {
     try {
+      offset = reset(offset)
       parse(state, curr, column)
     } catch {
       case AsyncException =>
@@ -302,6 +303,7 @@ final class Parser[F[_], A](plate: Plate[A], config: Parser.Config) extends Base
 
     this.state = state
     this.curr = i
+    this.offset = i
     this.column = column
 
     val inHeader = (state & HEADER_MASK) == HEADER
