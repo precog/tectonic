@@ -61,6 +61,7 @@ import scala.{
   Right,
   Unit
 }
+// import scala._, Predef._
 import scala.annotation.{switch, tailrec}
 
 import java.lang.{CharSequence, IndexOutOfBoundsException, SuppressWarnings}
@@ -851,7 +852,7 @@ final class Parser[F[_], A] private (
 
     // don't bother checkpointing every time when we skip
     val c = if (i >= unsafeLen() - 2) {
-      checkpoint(state, i, ring, offset, fallback)
+      checkpoint(state, i, ring, roffset, fallback)
       at(i)
     } else {
       // skip the redundant bounds check
@@ -880,14 +881,14 @@ final class Parser[F[_], A] private (
 
           case ']' | '}' =>
             if (skipDepth <= 0) {
-              rparse(if (enclosure(ring, offset, fallback)) OBJEND else ARREND, i, ring, offset, fallback)
+              rparse(if (enclosure(ring, roffset, fallback)) OBJEND else ARREND, i, ring, roffset, fallback)
             } else {
               val skipDepthBits = (skipDepth - 1) << SKIP_DEPTH_SHIFT
               rskip(skipDepthBits | SKIP_MAIN, i + 1)
             }
 
           case ',' if skipDepth == 0 =>
-            rparse(if (enclosure(ring, offset, fallback)) OBJEND else ARREND, i, ring, offset, fallback)
+            rparse(if (enclosure(ring, roffset, fallback)) OBJEND else ARREND, i, ring, roffset, fallback)
 
           case _ => rskip(state, i + 1)
         }

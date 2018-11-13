@@ -298,6 +298,12 @@ object ParserSpecs extends Specification {
       input must parseAsWithPlate(expected: _*)(targetMask[List[Event]](Right("b")))
     }
 
+    "skip .a and .b in { a: { no: ..., thanks: ... }, b: ..., c: ... }" in {
+      val input = """{ "a": { "no": 42, "thanks": null }, "b": "hi", "c": true }"""
+      val expected = List(NestMap("c"), Tru, Unnest, FinishRow)
+      input must parseAsWithPlate(expected: _*)(targetMask[List[Event]](Right("c")))
+    }
+
     "skip [0] and [2] in [..., ..., ...]" in {
       val input = """[42, "hi", true, null]"""
       val expected = List(NestArr, Str("hi"), Unnest, FinishRow)
