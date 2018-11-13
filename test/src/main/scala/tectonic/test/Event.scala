@@ -39,4 +39,6 @@ object Event {
   case object Unnest extends Event
 
   case object FinishRow extends Event
+
+  final case class Skipped(bytes: Int) extends Event
 }

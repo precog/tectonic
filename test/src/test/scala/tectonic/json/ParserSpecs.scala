@@ -294,31 +294,31 @@ object ParserSpecs extends Specification {
 
     "skip .a and .c in { a: ..., b: ..., c: ... }" in {
       val input = """{ "a": 42, "b": "hi", "c": true }"""
-      val expected = List(NestMap("b"), Str("hi"), Unnest, FinishRow)
+      val expected = List(Skipped(4), NestMap("b"), Str("hi"), Unnest, Skipped(7), FinishRow)
       input must parseAsWithPlate(expected: _*)(targetMask[List[Event]](Right("b")))
     }
 
     "skip .a and .b in { a: { no: ..., thanks: ... }, b: ..., c: ... }" in {
       val input = """{ "a": { "no": 42, "thanks": null }, "b": "hi", "c": true }"""
-      val expected = List(NestMap("c"), Tru, Unnest, FinishRow)
+      val expected = List(Skipped(30), Skipped(6), NestMap("c"), Tru, Unnest, FinishRow)
       input must parseAsWithPlate(expected: _*)(targetMask[List[Event]](Right("c")))
     }
 
     "skip [0] and [2] in [..., ..., ...]" in {
       val input = """[42, "hi", true, null]"""
-      val expected = List(NestArr, Str("hi"), Unnest, FinishRow)
+      val expected = List(Skipped(2), NestArr, Str("hi"), Unnest, Skipped(5), Skipped(6), Skipped(5), FinishRow)
       input must parseAsWithPlate(expected: _*)(targetMask[List[Event]](Left(1)))
     }
 
     "handle nested structure in skips" in {
       val input = """{ "a": { "c": [1, 2, 3], "d": { "e": null } }, "b": "hi" }"""
-      val expected = List(NestMap("b"), Str("hi"), Unnest, FinishRow)
+      val expected = List(Skipped(40), NestMap("b"), Str("hi"), Unnest, FinishRow)
       input must parseAsWithPlate(expected: _*)(targetMask[List[Event]](Right("b")))
     }
 
     "correctly ignore structure in skipped strings" in {
       val input = """{ "a": "foo}", "b": "hi" }"""
-      val expected = List(NestMap("b"), Str("hi"), Unnest, FinishRow)
+      val expected = List(Skipped(8), NestMap("b"), Str("hi"), Unnest, FinishRow)
       input must parseAsWithPlate(expected: _*)(targetMask[List[Event]](Right("b")))
     }
 
@@ -327,6 +327,7 @@ object ParserSpecs extends Specification {
       val input2 = """2, "b": "hi" }"""
 
       val expected = List(
+        Skipped(1),
         NestMap("b"),
         Str("hi"),
         Unnest,
@@ -344,7 +345,7 @@ object ParserSpecs extends Specification {
 
       val (first, second, third) = eff.unsafeRunSync()
 
-      first must beRight(Nil)
+      first must beRight(List(Skipped(2), Skipped(1)))
       second must beRight(expected)
       third must beRight(Nil)
     }

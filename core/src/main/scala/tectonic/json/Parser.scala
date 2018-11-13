@@ -264,6 +264,7 @@ final class Parser[F[_], A] private (
             parse(offset)
           } else if (state >= 8) {
             val curr2 = rskip(state, curr)
+            plate.skipped(curr2 - curr)
             rparse(if (enclosure(ring, roffset, fallback)) OBJEND else ARREND, curr2, ring, roffset, fallback)
           } else {
             rparse(state, curr, ring, roffset, fallback)
@@ -798,10 +799,13 @@ final class Parser[F[_], A] private (
     } else if (state == KEY) {
       // we are in an object expecting to see a key.
       if (c == '"') {
-        if (parseString(i, true))
+        if (parseString(i, true)) {
           rparse(SEP, curr, ring, offset, fallback)
-        else
-          rparse(OBJEND, rskip(SKIP_MAIN, curr), ring, offset, fallback)
+        } else {
+          val i2 = rskip(SKIP_MAIN, curr)
+          plate.skipped(i2 - curr)
+          rparse(OBJEND, i2, ring, offset, fallback)
+        }
       } else {
         die(i, "expected \"")
       }
@@ -816,10 +820,13 @@ final class Parser[F[_], A] private (
       // we are in an array, expecting to see a comma (before more data).
       if (c == ',') {
         plate.unnest()
-        if (plate.nestArr() eq SkipColumn)
-          rparse(ARREND, rskip(SKIP_MAIN, i + 1), ring, offset, fallback)
-        else
+        if (plate.nestArr() eq SkipColumn) {
+          val i2 = rskip(SKIP_MAIN, i + 1)
+          plate.skipped(i2 - (i + 1))
+          rparse(ARREND, i2, ring, offset, fallback)
+        } else {
           rparse(DATA, i + 1, ring, offset, fallback)
+        }
       } else {
         die(i, "expected ] or ,")
       }
@@ -833,10 +840,13 @@ final class Parser[F[_], A] private (
       }
     } else if (state == ARRBEG) {
       // we are starting an array, expecting to see data or a closing bracket.
-      if (plate.nestArr() eq SkipColumn)
-        rparse(ARREND, rskip(SKIP_MAIN, i), ring, offset, fallback)
-      else
+      if (plate.nestArr() eq SkipColumn) {
+        val i2 = rskip(SKIP_MAIN, i)
+        plate.skipped(i2 - i)
+        rparse(ARREND, i2, ring, offset, fallback)
+      } else {
         rparse(DATA, i, ring, offset, fallback)
+      }
     } else {
       // we are starting an object, expecting to see a key or a closing brace.
       rparse(KEY, i, ring, offset, fallback)
@@ -853,7 +863,8 @@ final class Parser[F[_], A] private (
     val i = reset(j)
 
     // don't bother checkpointing every time when we skip
-    val c = if (i >= unsafeLen() - 2) {
+    val c = if (i >= unsafeLen() - 1) {
+      plate.skipped(i - curr)
       checkpoint(state, i, ring, roffset, fallback)
       at(i)
     } else {

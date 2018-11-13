@@ -38,6 +38,9 @@ abstract class Plate[A] { self =>
   def finishRow(): Unit
   def finishBatch(terminal: Boolean): A
 
+  // TODO make this abstract in the next breaking release
+  def skipped(bytes: Int): Unit = ()
+
   final def mapDelegate[B](f: A => B): Plate[B] = new Plate[B] {
     def nul(): Signal = self.nul()
     def fls(): Signal = self.fls()
@@ -57,5 +60,7 @@ abstract class Plate[A] { self =>
 
     override def finishBatch(terminal: Boolean): B =
       f(self.finishBatch(terminal))
+
+    override def skipped(bytes: Int): Unit = self.skipped(bytes)
   }
 }
