@@ -260,12 +260,14 @@ final class Parser[F[_], A] private (
           // jump straight back into rparse
           offset = reset(offset)
 
-          val j = if (state <= 0)
+          val j = if (state <= 0) {
             parse(offset)
-          else if (state >= 8)
-            rskip(state, curr)
-          else
+          } else if (state >= 8) {
+            val curr2 = rskip(state, curr)
+            rparse(if (enclosure(ring, roffset, fallback)) OBJEND else ARREND, curr2, ring, roffset, fallback)
+          } else {
             rparse(state, curr, ring, roffset, fallback)
+          }
 
           if (streamMode > 0) {
             state = ASYNC_POSTVAL
@@ -799,7 +801,7 @@ final class Parser[F[_], A] private (
         if (parseString(i, true))
           rparse(SEP, curr, ring, offset, fallback)
         else
-          rskip(SKIP_MAIN, curr)
+          rparse(OBJEND, rskip(SKIP_MAIN, curr), ring, offset, fallback)
       } else {
         die(i, "expected \"")
       }
@@ -815,7 +817,7 @@ final class Parser[F[_], A] private (
       if (c == ',') {
         plate.unnest()
         if (plate.nestArr() eq SkipColumn)
-          rskip(SKIP_MAIN, i + 1)
+          rparse(ARREND, rskip(SKIP_MAIN, i + 1), ring, offset, fallback)
         else
           rparse(DATA, i + 1, ring, offset, fallback)
       } else {
@@ -832,7 +834,7 @@ final class Parser[F[_], A] private (
     } else if (state == ARRBEG) {
       // we are starting an array, expecting to see data or a closing bracket.
       if (plate.nestArr() eq SkipColumn)
-        rskip(SKIP_MAIN, i)
+        rparse(ARREND, rskip(SKIP_MAIN, i), ring, offset, fallback)
       else
         rparse(DATA, i, ring, offset, fallback)
     } else {
@@ -881,14 +883,13 @@ final class Parser[F[_], A] private (
 
           case ']' | '}' =>
             if (skipDepth <= 0) {
-              rparse(if (enclosure(ring, roffset, fallback)) OBJEND else ARREND, i, ring, roffset, fallback)
+              i
             } else {
               val skipDepthBits = (skipDepth - 1) << SKIP_DEPTH_SHIFT
               rskip(skipDepthBits | SKIP_MAIN, i + 1)
             }
 
-          case ',' if skipDepth == 0 =>
-            rparse(if (enclosure(ring, roffset, fallback)) OBJEND else ARREND, i, ring, roffset, fallback)
+          case ',' if skipDepth == 0 => i
 
           case _ => rskip(state, i + 1)
         }
