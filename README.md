@@ -2,11 +2,13 @@
 
 A columnar fork of [Jawn](https://github.com/non/Jawn) with added backend support for CSV. The distinction between "columnar" and its asymmetric opposite, "row-oriented", is in the orientation of data structures which you are expected to create in response to the event stream. Jawn expects a single, self-contained value with internal recursive structure per row, and its `Facade` trait is designed around this idea. Tectonic expects many rows to be combined into a much larger batch with a flat internal structure, and the `Plate` class is designed around this idea.
 
-Tectonic is also designed to support multiple backends, making it possible to write a parser for any sort of input stream (e.g. CSV, XML, etc) while driving a single `Plate`.
+Tectonic is also designed to support multiple backends, making it possible to write a parser for any sort of input stream (e.g. CSV, XML, etc) while driving a single `Plate`. At present, both CSV and JSON are supported, and we have plans to support XML in the future.
 
-These differences have led to some relatively meaningful changes within the parser implementation. Despite that, the bulk of the ideas and, in some areas, the *vast* bulk of the implementation of Tectonic's JSON parser is drawn directly from Jawn. **Special heartfelt thanks to [Erik Osheim](https://github.com/d6) and the rest of the Jawn contributors, without whom this project would not be possible.**
+Finally, Tectonic implements a form of fast *skipping* based on signals returned from the user-supplied `Plate` implementation driving a particular parse. In this way, it is possible to achieve [Mison](https://www.semanticscholar.org/paper/Mison%3A-A-Fast-JSON-Parser-for-Data-Analytics-Li-Katsipoulakis/6ac1276a15ae28ee7a1f3d0d7b323c1a5c55a86f)-style projection pushdown into the parse process. At present, skip scans do *not* compile down to vectorized assembly instructions ([SIMD](https://en.wikipedia.org/wiki/SIMD)), but it is theoretically possible to achieve this, despite sitting on top of the JVM.
 
-Tectonic is very likely the optimal JSON parser on the JVM for producing columnar data structures. When producing row-oriented structures (such as conventional JSON ASTs), it falls considerably behind Jawn both in terms of performance and usability. Tectonic is also relatively opinionated in that it assumes you will be applying it to variably-framed input stream (corresponding to Jawn's `AsyncParser`) and does not provide any other operating modes.
+All of these differences have led to some relatively meaningful changes within the parser implementation. Despite that, the bulk of the ideas and, in some areas, the *vast* bulk of the implementation of Tectonic's JSON parser is drawn directly from Jawn. **Special heartfelt thanks to [Erik Osheim](https://github.com/d6) and the rest of the Jawn contributors, without whom this project would not be possible.**
+
+Tectonic is very likely the optimal JSON parser on the JVM for producing columnar data structures. It is *definitely* the optimal JSON parser for producing columnar structures when you are able to compute some projections or row filters in advance, allowing skipping. When producing row-oriented structures (such as conventional JSON ASTs), it falls considerably behind Jawn both in terms of performance and usability. Tectonic is also relatively opinionated in that it assumes you will be applying it to variably-framed input stream (corresponding to Jawn's `AsyncParser`) and does not provide any other operating modes.
 
 ## Usage
 
@@ -86,6 +88,112 @@ If the supplied configuration defines `header = false`, then the inference will 
 
 When invoking the `Plate`, each CSV record will be represented as a `str(...)` invocation, wrapped in a `nestMap`/`unnest` call, where the corresponding header value is the map key.
 
+## Leveraging `SkipColumn`/`SkipRow`
+
+Depending on your final output representation and exactly what actions you're planning to perform on that representation, you may find that you don't need *all* of the data. A particularly common case (especially in columnar representations) is projection pushdown. Imagine you're evaluating an operation which is conceptually like the following SQL:
+
+```sql
+SELECT a + b FROM foo.json
+```
+
+The *foo.json* input data may contain many, *many* more columns than just `.a` and `.b`, and those columns may have significant substructure, numerics (which are often extremely expensive to consume), and more. In such a case, it is often extremely beneficial to instruct the parser to efficiently scan past bytes which are constituent to this superfluous structure, never even generating the `Plate` events which correspond to that input (see below for a rough benchmark measurement of *how* beneficial this can be in a contrived – but not necessarily best-case – scenario).
+
+This technique was pioneered (to our knowledge) by IBM with the [Mison Parser](https://www.semanticscholar.org/paper/Mison%3A-A-Fast-JSON-Parser-for-Data-Analytics-Li-Katsipoulakis/6ac1276a15ae28ee7a1f3d0d7b323c1a5c55a86f), and then later expanded upon by the Future Data team at Stanford in the [Sparser](https://dawn.cs.stanford.edu/2018/08/07/sparser/) project.
+
+Tectonic implements this technique through the use of the `Signal` ADT, which is returned from most event-carrying methods on `Plate`:
+
+```scala
+sealed trait Signal
+
+object Signal {
+  case object SkipRow extends Signal
+  case object SkipColumn extends Signal
+  case object Continue extends Signal
+  case object Terminate extends Signal
+}
+```
+
+The meaning of these various signals is as follows:
+
+- `SkipRow`: Efficiently scan to the end of the current *row*, run `FinishRow`, and then proceed with normal parsing. Useful for implementing *filter* pushdown (`WHERE` in SQL)
+- `SkipColumn`: Efficiently scan to the end of the current *column* and then proceed with normal parsing. Useful for implementing *projection* pushdown (`SELECT` in SQL). Ignored when returned from anything other than a `nest` method (it's impossible to skip something after you've already parsed it).
+- `Continue`: Proceed as usual
+- `Terminate`: Halt the parse immediately with an error
+
+**All signals are *hints*.** The underlying parser backend is always free to ignore them. Your `Plate` implementation should not assume that things will actually be skipped, since under certain circumstances (depending on the parser state machine and the nature of the input data format), skipping may not be possible. With that said, it is still best practice to produce the appropriate `Skip` whenever you can, as it can result in massive performance gains that are otherwise out of reach from user-land code.
+
+Returning to the example above, you can use the `DelegatingPlate` utility class to implement projection pushdown of `.a` and `.b` via `SkipColumn` in a relatively straightforward fashion:
+
+```scala
+def pushdown[F[_]: Sync, A](delegate: Plate[A]): F[Plate[A]] = {
+  Sync[F] delay {
+    new DelegatingPlate[A](delegate) {
+      private var depth = 0
+      private var skipping = false
+
+      override def nestMap(name: CharSequence): Signal = {
+        if (depth == 0) {
+          depth += 1
+          if (name.toString == "a" || name.toString == "b") {
+            super.nestMap(name)
+          } else {
+            skipping = true
+            Signal.SkipColumn
+          }
+        } else {
+          depth += 1
+          Signal.SkipColumn
+        }
+      }
+
+      override def nestArr(): Signal = {
+        depth += 1
+        if (skipping)
+          Signal.SkipColumn
+        else
+          super.nestArr()
+      }
+
+      override def nestMeta(name: CharSequence): Signal = {
+        depth += 1
+        if (skipping)
+          Signal.SkipColumn
+        else
+          super.nestMeta(name)
+      }
+
+      override def unnest(): Signal = {
+        depth -= 1
+        if (depth == 0 && skipping) {
+          skipping = false
+          Signal.Continue
+        } else {
+          super.unnest()
+        }
+      }
+    }
+  }
+}
+```
+
+There's a fair bit of boilerplate here needed to track the depth of nesting. If `SkipColumn` were not a hint but rather an absolute mandate, this would be somewhat easier. Either way though, hopefully the general idea is clear. Wrapping this function around any other `Plate` will result in that delegate plate receiving almost exactly the same event stream that it *would* have received if the underlying dataset exclusively contained `.a` and `.b` columns.
+
+We say "almost exactly" because there is one difference: `skipped`. The `Plate#skipped(Int)` method will be invoked one or more times by the backend any time a chunk of bytes is skipped due to a `SkipColumn` or `SkipRow` signal. The `Int` parameter represents the number of bytes skipped. Under some circumstances, this value may be `0`, and absolute accuracy is not *guaranteed* (though you can probably rely on it to be within 1 or 2 bytes each time). The default implementation of this function on `Plate` is to simply ignore the event.
+
+The purpose of `skipped` is to allow `Plate`s to efficiently build up metrics on data even when it isn't consumed. This can be extremely useful for some types of algorithms.
+
+### Parse Errors
+
+Tectonic backends are free to bypass error discovery in bytes which are ingested during a skip. For example, imagine a `SkipColumn` on the `.a` column in the following data:
+
+```
+{ "a": [1, 2}, "b": 42 }
+```
+
+Notice the mismatched braces (`[` with `}`) within the `.a` column. If the `.a` column is skipped, this will *not* be considered a parse error by Tectonic JSON. This may seem somewhat bizarre, but it's actually quite important. Detecting errors in the input stream is actually a relatively expensive process (for example, it requires a stack representation to track array vs map nesting). The skip scan can be made *vastly* more efficient when error detection is discarded.
+
+Error detection resumes appropriately as soon as the skip scan finishes. Thus, any data which is *not* skipped will be appropriately checked for parse errors.
+
 ## Performance
 
 Broadly-speaking, the performance of Tectonic JSON is roughly on-par with Jawn. Depending on your measurement assumptions, it may actually be slightly faster. It's very very difficult to setup a fair series of measurements, due to the fact that Tectonic produces batched columnar data while Jawn produces rows on an individual basis.
@@ -149,6 +257,21 @@ The following were run on my laptop in powered mode with networking disabled, 20
 |          jawn |           `qux2.json` |       19.153 | ± 0.119 |
 |  **tectonic** |        `ugh10k.json`  |  **115.467** | ± 0.838 |
 |          jawn |        `ugh10k.json`  |      130.876 | ± 0.972 |
+
+#### Column Skip Benchmarks
+
+Column skips – otherwise known as *projection pushdown* – are one of the unique features of the Tectonic parsing framework. The exact performance benefits you gain from returning `SkipColumn` vary considerably depending on exactly when you skip (e.g. one column, or a lot of columns), what your data looks like, and how expensive your `Plate` implementation is on a per-scalar basis. We can get a general idea of the performance impact of skipping though by contriving a benchmark based on the `ugh10k.json` dataset, which is not *particularly* wide, but has enough substructure to demonstrate interesting skipping.
+
+The following benchmark selects just the `.bar` field out of the top-level object in each row, skipping *everything* else. It's being run in tectonic using the `FacadeTuningParams` from above, both with and without skips to demonstrate the impact:
+
+| Skips? | Milliseconds | Error     |
+| ---    | --:          | :--       |
+| 😁     | **33.716**   | **0.231** |
+| 😑     | 117.025      | 0.978     |
+
+So that's a roughly **3.47x** performance jump. It's difficult to draw general conclusions from this data, other than the fact that having skips is better than not having skips. In testing on realistic workloads in Spark, IBM found that their Mison parser improved overall batch run times by up to 20x. Tectonic is (presently) unable to benefit from the CPU vectorized instructions that Mison is using to achieve theoretically optimal skip scan performance, but it's at least *theoretically* capable of hitting those kinds of performance gains on certain datasets with amenable workloads. 
+
+At the very least, skipping is never a *bad* idea.
 
 ### Row-Counting Benchmark for CSV
 
