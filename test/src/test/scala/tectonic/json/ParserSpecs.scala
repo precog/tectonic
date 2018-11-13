@@ -21,20 +21,20 @@ import cats.effect.IO
 
 import org.specs2.mutable.Specification
 
-import tectonic.test.Event
+import tectonic.test.{Event, ReifiedTerminalPlate}
 import tectonic.test.json._
 
-import scala.{Array, Boolean, Int, List, Unit, Predef}, Predef._
+import scala.{Array, Boolean, Int, List, Nil, Unit, Predef}, Predef._
 import scala.collection.mutable
+import scala.util.{Either, Left, Right}
 
 import java.lang.{CharSequence, SuppressWarnings}
 
 @SuppressWarnings(Array("org.wartremover.warts.Equals"))
 object ParserSpecs extends Specification {
+  import Event._
 
   "async line-delimited parsing" should {
-    import Event._
-
     "parse all of the scalars" >> {
       "null" >> {
         "null" must parseRowAs(Nul)
@@ -250,6 +250,97 @@ object ParserSpecs extends Specification {
 
         input must parseRowAs(output: _*)
       }
+    }
+  }
+
+  "column skips on nest" should {
+    def targetMask[A](target: Either[Int, String])(delegate: Plate[A]): Plate[A] = new DelegatingPlate[A](delegate) {
+      private[this] var depth = 0
+      private[this] var index = 0
+
+      override def nestMap(pathComponent: CharSequence): Signal = {
+        if (Right(pathComponent.toString) == target && depth == 0) {
+          super.nestMap(pathComponent)
+        } else {
+          depth += 1
+          Signal.SkipColumn
+        }
+      }
+
+      override def nestArr(): Signal = {
+        if (depth == 0) {
+          index += 1
+          if (Left(index - 1) == target) {
+            super.nestArr()
+          } else {
+            depth += 1
+            Signal.SkipColumn
+          }
+        } else {
+          depth += 1
+          Signal.SkipColumn
+        }
+      }
+
+      override def unnest(): Signal = {
+        if (depth == 0) {
+          super.unnest()
+        } else {
+          depth -= 1
+          Signal.Continue
+        }
+      }
+    }
+
+    "skip .a and .c in { a: ..., b: ..., c: ... }" in {
+      val input = """{ "a": 42, "b": "hi", "c": true }"""
+      val expected = List(NestMap("b"), Str("hi"), Unnest, FinishRow)
+      input must parseAsWithPlate(expected: _*)(targetMask[List[Event]](Right("b")))
+    }
+
+    "skip [0] and [2] in [..., ..., ...]" in {
+      val input = """[42, "hi", true, null]"""
+      val expected = List(NestArr, Str("hi"), Unnest, FinishRow)
+      input must parseAsWithPlate(expected: _*)(targetMask[List[Event]](Left(1)))
+    }
+
+    "handle nested structure in skips" in {
+      val input = """{ "a": { "c": [1, 2, 3], "d": { "e": null } }, "b": "hi" }"""
+      val expected = List(NestMap("b"), Str("hi"), Unnest, FinishRow)
+      input must parseAsWithPlate(expected: _*)(targetMask[List[Event]](Right("b")))
+    }
+
+    "correctly ignore structure in skipped strings" in {
+      val input = """{ "a": "foo}", "b": "hi" }"""
+      val expected = List(NestMap("b"), Str("hi"), Unnest, FinishRow)
+      input must parseAsWithPlate(expected: _*)(targetMask[List[Event]](Right("b")))
+    }
+
+    "suspend appropriately within skips" in {
+      val input1 = """{ "a": 4"""
+      val input2 = """2, "b": "hi" }"""
+
+      val expected = List(
+        NestMap("b"),
+        Str("hi"),
+        Unnest,
+        FinishRow)
+
+      val eff = for {
+        parser <- Parser(
+          ReifiedTerminalPlate[IO].map(targetMask[List[Event]](Right("b"))),
+          Parser.ValueStream)
+
+        first <- parser.absorb(input1)
+        second <- parser.absorb(input2)
+        third <- parser.finish
+      } yield (first, second, third)
+
+      val (first, second, third) = eff.unsafeRunSync()
+
+      first must beRight(Nil)
+      second must beRight(expected)
+      third must beRight(Nil)
     }
   }
 }

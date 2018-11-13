@@ -97,7 +97,7 @@ private[json] final class ProjectionPlate[A] private (
   private[this] val SkipColumn = if (enableSkips) Signal.SkipColumn else Signal.Continue
 
   override def nestMap(pathComponent: CharSequence): Signal = {
-    if (under <= 0 && pathComponent == field) {
+    if (under <= 0 && pathComponent.toString == field) {
       under += 1
       super.nestMap(pathComponent)
     } else if (under > 0) {
