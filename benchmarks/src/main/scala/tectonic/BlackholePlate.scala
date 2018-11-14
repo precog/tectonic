@@ -16,11 +16,13 @@
 
 package tectonic
 
+import cats.effect.Sync
+
 import scala.collection.immutable.List
 
 import org.openjdk.jmh.infra.Blackhole
 
-final class BlackholePlate(
+final class BlackholePlate private (
     vectorCost: Long,
     scalarCost: Long,
     tinyScalarCost: Long,
@@ -96,4 +98,17 @@ final class BlackholePlate(
     consumeCPU(batchCost)
     List.empty[Nothing]
   }
+}
+
+object BlackholePlate {
+
+  def apply[F[_]: Sync](
+      vectorCost: Long,
+      scalarCost: Long,
+      tinyScalarCost: Long,
+      numericCost: Long,
+      rowCost: Long,
+      batchCost: Long)
+      : F[Plate[List[Nothing]]] =
+    Sync[F].delay(new BlackholePlate(vectorCost, scalarCost, tinyScalarCost, numericCost, rowCost, batchCost))
 }

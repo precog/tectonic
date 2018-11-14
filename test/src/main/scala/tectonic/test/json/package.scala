@@ -15,6 +15,9 @@
  */
 
 package tectonic
+package test
+
+import cats.effect.IO
 
 import org.specs2.matcher.{Matcher, MatchersImplicits}
 
@@ -25,7 +28,7 @@ import scala.util.{Left, Right}
 
 import java.lang.String
 
-package object test {
+package object json {
   private object MatchersImplicits extends MatchersImplicits
 
   import MatchersImplicits._
@@ -34,12 +37,16 @@ package object test {
     parseAs(expected :+ Event.FinishRow: _*)
 
   def parseAs(expected: Event*): Matcher[String] = { input: String =>
-    val parser = Parser(new ReifiedTerminalPlate, Parser.ValueStream)
+    val resultsF = for {
+      parser <- Parser(ReifiedTerminalPlate[IO], Parser.ValueStream)
+      left <- parser.absorb(input)
+      right <- parser.finish
+    } yield (left, right)
 
-    (parser.absorb(input), parser.finish()) match {
+    resultsF.unsafeRunSync() match {
       case (Right(init), Right(tail)) =>
         val results = init ++ tail
-        (results == expected.toList, s"expected $expected and got $results")
+        (results == expected.toList, s"$results != ${expected.toList}")
 
       case (Left(err), _) =>
         (false, s"failed to parse with error '${err.getMessage}' at ${err.line}:${err.col} (i=${err.index})")
