@@ -97,7 +97,7 @@ object ParserSpecs extends Specification {
           List(NestMap(header), Str(i.toString), Unnest)
       }
 
-      input must parseAs(generated ::: List(FinishRow): _*)
+      (input + input) must parseAs(generated ::: List(FinishRow) ::: generated ::: List(FinishRow): _*)
     }
 
     "parse a single value with a row ending in EOF" in {

@@ -471,7 +471,7 @@ final class Parser[F[_], A](plate: Plate[A], config: Parser.Config) extends Base
     if (column >= header.length) {
       val old = header
       header = new Array[CharSequence](old.length * 2)
-      System.arraycopy(header, 0, old, 0, old.length)
+      System.arraycopy(old, 0, header, 0, old.length)
     }
   }
 
