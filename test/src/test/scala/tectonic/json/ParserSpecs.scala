@@ -304,9 +304,9 @@ object ParserSpecs extends Specification {
       input must parseAsWithPlate(expected: _*)(targetMask[List[Event]](Right("c")))
     }
 
-    "skip [0] and [2] in [..., ..., ...]" in {
+    "retain only [1] in [..., ..., ..., ...]" in {
       val input = """[42, "hi", true, null]"""
-      val expected = List(Skipped(2), NestArr, Str("hi"), Unnest, Skipped(5), Skipped(6), Skipped(5), FinishRow)
+      val expected = List(Skipped(2), NestArr, Str("hi"), Unnest, Skipped(5), Skipped(5), FinishRow)
       input must parseAsWithPlate(expected: _*)(targetMask[List[Event]](Left(1)))
     }
 
@@ -345,7 +345,7 @@ object ParserSpecs extends Specification {
 
       val (first, second, third) = eff.unsafeRunSync()
 
-      first must beRight(List(Skipped(2), Skipped(1)))
+      first must beRight(List(Skipped(3)))
       second must beRight(expected)
       third must beRight(Nil)
     }

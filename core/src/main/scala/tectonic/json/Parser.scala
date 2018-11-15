@@ -863,7 +863,7 @@ final class Parser[F[_], A] private (
     val i = reset(j)
 
     // don't bother checkpointing every time when we skip
-    val c = if (i >= unsafeLen() - 1) {
+    val c = if (i > unsafeLen() - 1) {
       plate.skipped(i - curr)
       checkpoint(state, i, ring, roffset, fallback)
       at(i)
