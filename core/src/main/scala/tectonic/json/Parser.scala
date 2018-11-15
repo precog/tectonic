@@ -61,6 +61,7 @@ import scala.{
   Right,
   Unit
 }
+// import scala._, Predef._
 import scala.annotation.{switch, tailrec}
 
 import java.lang.{CharSequence, IndexOutOfBoundsException, SuppressWarnings}
@@ -156,6 +157,30 @@ final class Parser[F[_], A] private (
   @inline private[this] final val ARREND = 4
   @inline private[this] final val OBJEND = 5
 
+  @inline private[this] final val SKIP_MAIN = 8
+  @inline private[this] final val SKIP_STRING = 9
+
+  /*
+   * This is slightly tricky. We're using the otherwise-unused
+   * high order bits of `state` to track the depth of the structural
+   * nesting when we are skipping. We can do this because we know
+   * that the depth will always be positive. We posit that 134,217,727
+   * levels is enough nesting for anyone.
+   */
+
+  @inline private[this] final val SKIP_DEPTH_SHIFT = 4
+
+  // remove the sign and lowest four bits
+  @inline private[this] final val SKIP_DEPTH_MASK =
+    ~(Int.MinValue | (1 << SKIP_DEPTH_SHIFT) - 1)
+
+  @inline private[this] final val SKIP_DEPTH_LIMIT = (2 << (31 - 4)) - 1
+
+  // private[this] final val Continue = Signal.Continue
+  private[this] final val SkipColumn = Signal.SkipColumn
+  // private[this] final val SkipRow = Signal.SkipRow
+  // private[this] final val Terminate = Signal.Terminate
+
   @SuppressWarnings(Array("org.wartremover.warts.While"))
   private[this] val HexChars: Array[Int] = {
     val arr = new Array[Int](128)
@@ -234,11 +259,17 @@ final class Parser[F[_], A] private (
         } else {
           // jump straight back into rparse
           offset = reset(offset)
+
           val j = if (state <= 0) {
             parse(offset)
+          } else if (state >= 8) {
+            val curr2 = rskip(state, curr)
+            plate.skipped(curr2 - curr)
+            rparse(if (enclosure(ring, roffset, fallback)) OBJEND else ARREND, curr2, ring, roffset, fallback)
           } else {
             rparse(state, curr, ring, roffset, fallback)
           }
+
           if (streamMode > 0) {
             state = ASYNC_POSTVAL
           } else if (streamMode == 0) {
@@ -498,12 +529,13 @@ final class Parser[F[_], A] private (
       "org.wartremover.warts.NonUnitStatements",
       "org.wartremover.warts.While",
       "org.wartremover.warts.Return"))
-  protected[this] def parseString(i: Int, key: Boolean): Int = {
+  protected[this] def parseString(i: Int, key: Boolean): Boolean = {
     val k = parseStringSimple(i + 1)
     if (k != -1) {
       val cs = at(i + 1, k - 1)
-      if (key) plate.nestMap(cs) else plate.str(cs)
-      return k
+      val s = if (key) plate.nestMap(cs) else plate.str(cs)
+      this.curr = k
+      return (s ne SkipColumn)
     }
 
     // TODO: we might be able to do better by identifying where
@@ -555,8 +587,9 @@ final class Parser[F[_], A] private (
       }
       c = byte(j) & 0xff
     }
-    if (key) plate.nestMap(sb.makeString) else plate.str(sb.makeString)
-    j + 1
+    val s = if (key) plate.nestMap(sb.makeString) else plate.str(sb.makeString)
+    this.curr = j + 1
+    s ne SkipColumn
   }
 
   /**
@@ -630,9 +663,9 @@ final class Parser[F[_], A] private (
 
       // we have a single top-level string
       case '"' =>
-        val j = parseString(i, false)
+        val _ = parseString(i, false)
         plate.finishRow()
-        j
+        curr
 
       // we have a single top-level constant
       case 't' =>
@@ -721,8 +754,8 @@ final class Parser[F[_], A] private (
           val j = parseNum(i)
           rparse(if (enclosure(ring, offset, fallback)) OBJEND else ARREND, j, ring, offset, fallback)
         } else if (c == '"') {
-          val j = parseString(i, false)
-          rparse(if (enclosure(ring, offset, fallback)) OBJEND else ARREND, j, ring, offset, fallback)
+          parseString(i, false)
+          rparse(if (enclosure(ring, offset, fallback)) OBJEND else ARREND, curr, ring, offset, fallback)
         } else if (c == 't') {
           parseTrue(i)
           rparse(if (enclosure(ring, offset, fallback)) OBJEND else ARREND, i + 4, ring, offset, fallback)
@@ -766,7 +799,13 @@ final class Parser[F[_], A] private (
     } else if (state == KEY) {
       // we are in an object expecting to see a key.
       if (c == '"') {
-        rparse(SEP, parseString(i, true), ring, offset, fallback)
+        if (parseString(i, true)) {
+          rparse(SEP, curr, ring, offset, fallback)
+        } else {
+          val i2 = rskip(SKIP_MAIN, curr)
+          plate.skipped(i2 - curr)
+          rparse(OBJEND, i2, ring, offset, fallback)
+        }
       } else {
         die(i, "expected \"")
       }
@@ -781,8 +820,13 @@ final class Parser[F[_], A] private (
       // we are in an array, expecting to see a comma (before more data).
       if (c == ',') {
         plate.unnest()
-        plate.nestArr()
-        rparse(DATA, i + 1, ring, offset, fallback)
+        if (plate.nestArr() eq SkipColumn) {
+          val i2 = rskip(SKIP_MAIN, i + 1)
+          plate.skipped(i2 - (i + 1))
+          rparse(ARREND, i2, ring, offset, fallback)
+        } else {
+          rparse(DATA, i + 1, ring, offset, fallback)
+        }
       } else {
         die(i, "expected ] or ,")
       }
@@ -796,11 +840,80 @@ final class Parser[F[_], A] private (
       }
     } else if (state == ARRBEG) {
       // we are starting an array, expecting to see data or a closing bracket.
-      plate.nestArr()
-      rparse(DATA, i, ring, offset, fallback)
+      if (plate.nestArr() eq SkipColumn) {
+        val i2 = rskip(SKIP_MAIN, i)
+        plate.skipped(i2 - i)
+        rparse(ARREND, i2, ring, offset, fallback)
+      } else {
+        rparse(DATA, i, ring, offset, fallback)
+      }
     } else {
       // we are starting an object, expecting to see a key or a closing brace.
       rparse(KEY, i, ring, offset, fallback)
+    }
+  }
+
+  @tailrec
+  @SuppressWarnings(
+    Array(
+      "org.wartremover.warts.NonUnitStatements",
+      "org.wartremover.warts.Equals"))
+  private[this] final def rskip(state: Int, j: Int): Int = {
+    // we might miss parse errors within a skip block (e.g. closing an object with ']'). this is by design
+    val i = reset(j)
+
+    // don't bother checkpointing every time when we skip
+    val c = if (i > unsafeLen() - 1) {
+      plate.skipped(i - curr)
+      checkpoint(state, i, ring, roffset, fallback)
+      at(i)
+    } else {
+      // skip the redundant bounds check
+      unsafeData()(i).toChar
+    }
+
+    if (c == '\n') {
+      newline(i)
+    }
+
+    // we're hiding our structural depth within the high-order bits to avoid extra integers
+    val realState = state & ~SKIP_DEPTH_MASK
+    val skipDepthBits = state & SKIP_DEPTH_MASK
+    val skipDepth = skipDepthBits >> SKIP_DEPTH_SHIFT
+
+    (realState: @switch) match {
+      case SKIP_MAIN =>
+        (c: @switch) match {
+          case '"' => rskip(skipDepthBits | SKIP_STRING, i + 1)
+
+          case '{' | '[' =>
+            val skipDepth2 = skipDepth + 1
+            if (skipDepth2 >= SKIP_DEPTH_LIMIT) error("cannot skip over structure with more than 134,217,727 levels of nesting")
+            val skipDepthBits = skipDepth2 << SKIP_DEPTH_SHIFT
+            rskip(skipDepthBits | SKIP_MAIN, i + 1)
+
+          case ']' | '}' =>
+            if (skipDepth <= 0) {
+              i
+            } else {
+              val skipDepthBits = (skipDepth - 1) << SKIP_DEPTH_SHIFT
+              rskip(skipDepthBits | SKIP_MAIN, i + 1)
+            }
+
+          case ',' if skipDepth == 0 => i
+
+          case _ => rskip(state, i + 1)
+        }
+
+      case SKIP_STRING =>
+        (c: @switch) match {
+          case '\\' => rskip(skipDepthBits | SKIP_STRING, i + 2)
+          case '"' => rskip(skipDepthBits | SKIP_MAIN, i + 1)
+          case _ => rskip(state, i + 1)
+        }
+
+      case _ =>
+        error("invalid state in rskip: " + state.toString)
     }
   }
 

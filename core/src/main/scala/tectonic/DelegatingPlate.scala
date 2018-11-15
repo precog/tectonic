@@ -60,4 +60,7 @@ abstract class DelegatingPlate[A](val delegate: Plate[A]) extends Plate[A] {
 
   def finishBatch(terminal: Boolean): A =
     delegate.finishBatch(terminal)
+
+  override def skipped(bytes: Int): Unit =
+    delegate.skipped(bytes)
 }

@@ -17,12 +17,10 @@
 package tectonic
 package json
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.{ContextShift, IO, Sync}
 
 import _root_.fs2.Chunk
 import _root_.fs2.io.file
-
-import jawnfs2._
 
 import org.openjdk.jmh.annotations.{Benchmark, BenchmarkMode, Mode, OutputTimeUnit, Param, Scope, State}
 import org.openjdk.jmh.infra.Blackhole
@@ -38,10 +36,7 @@ import java.util.concurrent.{Executors, TimeUnit}
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
 @BenchmarkMode(Array(Mode.AverageTime))
 @State(Scope.Benchmark)
-class ParserBenchmarks {
-  val TectonicFramework = "tectonic"
-  val JawnFramework = "jawn"
-
+class SkipBenchmarks {
   private[this] implicit val CS: ContextShift[IO] =
     IO.contextShift(ExecutionContext.global)
 
@@ -59,65 +54,71 @@ class ParserBenchmarks {
 
   import FacadeTuningParams._
 
-  // params
-
-  @Param(Array("tectonic", "jawn"))
-  var framework: String = _
-
-  @Param(Array(
-    "bar (not wrapped)",
-    "bla2 (not wrapped)",
-    "bla25 (wrapped)",
-    "countries.geo (not wrapped)",
-    "dkw-sample (not wrapped)",
-    "foo (wrapped)",
-    "qux1 (not wrapped)",
-    "qux2 (not wrapped)",
-    "ugh10k (wrapped)"))
-  var input: String = _
-
-  // benchmarks
+  @Param(Array("true", "false"))
+  var enableSkips: Boolean = _
 
   // includes the cost of file IO; not sure if that's a good thing?
   @Benchmark
-  def parseThroughFs2(bh: Blackhole): Unit = {
-    val modeStart = input.indexOf('(')
-    val inputMode = input.substring(modeStart + 1, input.length - 1) == "wrapped"
-    val inputFile = input.substring(0, modeStart - 1)
+  def projectBarKeyFromUgh10k(bh: Blackhole): Unit = {
+    val plateF = for {
+      terminal <- BlackholePlate[IO](
+        Tectonic.VectorCost,
+        Tectonic.ScalarCost,
+        Tectonic.TinyScalarCost,
+        NumericCost,
+        Tectonic.RowCost,
+        Tectonic.BatchCost)
 
-    val plateF = BlackholePlate[IO](
-      Tectonic.VectorCost,
-      Tectonic.ScalarCost,
-      Tectonic.TinyScalarCost,
-      NumericCost,
-      Tectonic.RowCost,
-      Tectonic.BatchCost)
-
-    implicit val facade = new BlackholeFacade(
-      Jawn.VectorAddCost,
-      Jawn.VectorFinalCost,
-      Jawn.ScalarCost,
-      Jawn.TinyScalarCost,
-      NumericCost)
+      back <- ProjectionPlate[IO, List[Nothing]](terminal, "bar", enableSkips)
+    } yield back
 
     val contents = file.readAll[IO](
-      ResourceDir.resolve(inputFile + ".json"),
+      ResourceDir.resolve("ugh10k.json"),
       BlockingEC,
       ChunkSize)
 
-    val processed = if (framework == TectonicFramework) {
-      val mode = if (inputMode) Parser.UnwrapArray else Parser.ValueStream
-      val parser = StreamParser(Parser(plateF, mode): IO[BaseParser[IO, List[Nothing]]])(
-        _ => Chunk.empty[Nothing],
-        _ => Chunk.empty[Nothing])
-      contents.through(parser)
-    } else {
-      if (inputMode)
-        contents.chunks.unwrapJsonArray
-      else
-        contents.chunks.parseJsonStream
-    }
+    val parser = StreamParser(Parser(plateF, Parser.UnwrapArray))(
+      _ => Chunk.empty[Nothing],
+      _ => Chunk.empty[Nothing])
 
-    processed.compile.drain.unsafeRunSync()
+    contents.through(parser).compile.drain.unsafeRunSync()
   }
+}
+
+private[json] final class ProjectionPlate[A] private (
+    delegate: Plate[A],
+    field: String,
+    enableSkips: Boolean)
+    extends DelegatingPlate(delegate) {
+
+  private[this] final var under: Int = 0
+
+  private[this] val Continue = Signal.Continue
+  private[this] val SkipColumn = if (enableSkips) Signal.SkipColumn else Signal.Continue
+
+  override def nestMap(pathComponent: CharSequence): Signal = {
+    if (under <= 0 && pathComponent.toString == field) {
+      under += 1
+      super.nestMap(pathComponent)
+    } else if (under > 0) {
+      under += 1
+      super.nestMap(pathComponent)
+    } else {
+      SkipColumn
+    }
+  }
+
+  override def unnest(): Signal = {
+    if (under > 0) {
+      under -= 1
+      super.unnest()
+    } else {
+      Continue
+    }
+  }
+}
+
+private[json] object ProjectionPlate {
+  def apply[F[_]: Sync, A](delegate: Plate[A], field: String, enableSkips: Boolean): F[Plate[A]] =
+    Sync[F].delay(new ProjectionPlate(delegate, field, enableSkips))
 }

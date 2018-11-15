@@ -96,6 +96,12 @@ final class ReifiedTerminalPlate private () extends Plate[List[Event]] {
     events.clear()
     back
   }
+
+  override def skipped(bytes: Int): Unit = {
+    if (bytes > 0) {
+      events += Skipped(bytes)
+    }
+  }
 }
 
 object ReifiedTerminalPlate {
@@ -117,6 +123,7 @@ object ReifiedTerminalPlate {
       case Event.NestMeta(path) => plate.nestMeta(path)
       case Event.Unnest => plate.unnest()
       case Event.FinishRow => plate.finishRow()
+      case Event.Skipped(bytes) => plate.skipped(bytes)
     }
 
     plate.finishBatch(true)

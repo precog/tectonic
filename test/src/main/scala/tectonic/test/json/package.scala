@@ -23,7 +23,7 @@ import org.specs2.matcher.{Matcher, MatchersImplicits}
 
 import tectonic.json.Parser
 
-import scala.StringContext
+import scala.{List, StringContext}
 import scala.util.{Left, Right}
 
 import java.lang.String
@@ -36,9 +36,12 @@ package object json {
   def parseRowAs(expected: Event*): Matcher[String] =
     parseAs(expected :+ Event.FinishRow: _*)
 
-  def parseAs(expected: Event*): Matcher[String] = { input: String =>
+  def parseAs(expected: Event*): Matcher[String] =
+    parseAsWithPlate(expected: _*)(p => p)
+
+  def parseAsWithPlate(expected: Event*)(f: Plate[List[Event]] => Plate[List[Event]]): Matcher[String] = { input: String =>
     val resultsF = for {
-      parser <- Parser(ReifiedTerminalPlate[IO], Parser.ValueStream)
+      parser <- Parser(ReifiedTerminalPlate[IO].map(f), Parser.ValueStream)
       left <- parser.absorb(input)
       right <- parser.finish
     } yield (left, right)
