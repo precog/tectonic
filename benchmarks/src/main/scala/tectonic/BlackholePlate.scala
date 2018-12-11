@@ -98,6 +98,8 @@ final class BlackholePlate private (
     consumeCPU(batchCost)
     List.empty[Nothing]
   }
+
+  def skipped(bytes: Int): Unit = ()
 }
 
 object BlackholePlate {

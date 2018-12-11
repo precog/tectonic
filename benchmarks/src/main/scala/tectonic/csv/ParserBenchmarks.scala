@@ -92,6 +92,8 @@ class ParserBenchmarks {
           count = 0
           back
         }
+
+        def skipped(bytes: Int) = ()
       }
     }
 

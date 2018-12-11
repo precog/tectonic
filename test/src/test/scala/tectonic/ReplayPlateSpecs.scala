@@ -84,6 +84,8 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
 
         def finishRow(): Unit = ()
         def finishBatch(terminal: Boolean) = ()
+
+        def skipped(bytes: Int) = ()
       }
 
       cursor.drive(sink)

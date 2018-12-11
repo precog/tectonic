@@ -38,8 +38,7 @@ abstract class Plate[A] { self =>
   def finishRow(): Unit
   def finishBatch(terminal: Boolean): A
 
-  // TODO make this abstract in the next breaking release
-  def skipped(bytes: Int): Unit = ()
+  def skipped(bytes: Int): Unit
 
   final def mapDelegate[B](f: A => B): Plate[B] = new Plate[B] {
     def nul(): Signal = self.nul()
