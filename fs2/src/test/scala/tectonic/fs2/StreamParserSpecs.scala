@@ -37,7 +37,7 @@ object StreamParserSpecs extends Specification {
   import Event._
 
   val parserF: IO[BaseParser[IO, List[Event]]] =
-    Parser(ReifiedTerminalPlate[IO], Parser.ValueStream)
+    Parser(ReifiedTerminalPlate[IO](), Parser.ValueStream)
 
   val parser: Pipe[IO, Byte, Event] =
     StreamParser.foldable(parserF)

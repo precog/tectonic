@@ -111,7 +111,7 @@ final class ReifiedTerminalPlate private (accumToTerminal: Boolean) extends Plat
 object ReifiedTerminalPlate {
 
   @SuppressWarnings(Array("org.wartremover.warts.DefaultArguments"))
-  def apply[F[_]: Sync](accumToTerminal: Boolean = false): F[Plate[List[Event]]] =
+  def apply[F[_]: Sync](accumToTerminal: Boolean = true): F[Plate[List[Event]]] =
     Sync[F].delay(new ReifiedTerminalPlate(accumToTerminal))
 
   def visit[A](events: List[Event], plate: Plate[A]): A = {

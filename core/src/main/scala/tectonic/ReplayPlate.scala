@@ -159,7 +159,6 @@ final class ReplayPlate private (limit: Int) extends Plate[Option[EventCursor]] 
   @SuppressWarnings(Array("org.wartremover.warts.Equals"))
   private[this] final def checkTags(): Unit = {
     if (tagSubShift == 0 && tagPointer >= tagBuffer.length) {
-      scala.Predef.println("growing")
       val tagBuffer2 = new Array[Long](tagBuffer.length * 2)
       System.arraycopy(tagBuffer, 0, tagBuffer2, 0, tagBuffer.length)
       tagBuffer = tagBuffer2
