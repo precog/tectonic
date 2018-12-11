@@ -18,10 +18,10 @@ package tectonic
 
 import cats.effect.Sync
 
-import scala.{Array, Boolean, Int, Long, None, Option, Some, Unit}
-// import scala.{Predef, StringContext}, Predef._
+import scala.{Array, Boolean, Int, Long, None, Option, Some, StringContext, Unit}
+// import scala.{Predef}, Predef._
 
-import java.lang.{CharSequence, SuppressWarnings, System}
+import java.lang.{CharSequence, IllegalStateException, SuppressWarnings, System}
 
 /**
  * Produces None until finishBatch(true) is called.
@@ -156,9 +156,13 @@ final class ReplayPlate private (limit: Int) extends Plate[Option[EventCursor]] 
     }
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+  @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Throw"))
   private[this] final def checkTags(): Unit = {
     if (tagSubShift == 0 && tagPointer >= tagBuffer.length) {
+      if (tagBuffer.length * 2 > limit) {
+        throw new IllegalStateException(s"unable to grow EventCursor beyond $limit")
+      }
+
       val tagBuffer2 = new Array[Long](tagBuffer.length * 2)
       System.arraycopy(tagBuffer, 0, tagBuffer2, 0, tagBuffer.length)
       tagBuffer = tagBuffer2
@@ -171,9 +175,13 @@ final class ReplayPlate private (limit: Int) extends Plate[Option[EventCursor]] 
     strsPointer += 1
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+  @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Throw"))
   private[this] final def checkStrs(): Unit = {
     if (strsPointer >= strsBuffer.length) {
+      if (strsBuffer.length * 2 > limit) {
+        throw new IllegalStateException(s"unable to grow EventCursor beyond $limit")
+      }
+
       val strsBuffer2 = new Array[CharSequence](strsBuffer.length * 2)
       System.arraycopy(strsBuffer, 0, strsBuffer2, 0, strsBuffer.length)
       strsBuffer = strsBuffer2
@@ -186,9 +194,13 @@ final class ReplayPlate private (limit: Int) extends Plate[Option[EventCursor]] 
     intsPointer += 1
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+  @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Throw"))
   private[this] final def checkInts(): Unit = {
     if (intsPointer >= intsBuffer.length) {
+      if (intsBuffer.length * 2 > limit) {
+        throw new IllegalStateException(s"unable to grow EventCursor beyond $limit")
+      }
+
       val intsBuffer2 = new Array[Int](intsBuffer.length * 2)
       System.arraycopy(intsBuffer, 0, intsBuffer2, 0, intsBuffer.length)
       intsBuffer = intsBuffer2

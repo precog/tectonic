@@ -24,14 +24,14 @@ import org.specs2.mutable._
 
 import scala.{Boolean, Int, List, Option, Predef, Unit}, Predef._
 
-import java.lang.{CharSequence, Runtime}
+import java.lang.{CharSequence, IllegalStateException, Runtime}
 
 object ReplayPlateSpecs extends Specification with ScalaCheck {
   import Generators._
 
   "ReplayPlate" should {
     "round-trip events" in prop { (driver: ∀[λ[α => Plate[α] => Unit]]) =>
-      val plate = ReplayPlate[IO](-1).unsafeRunSync()
+      val plate = ReplayPlate[IO](52428800).unsafeRunSync()
       driver[Option[EventCursor]](plate)
 
       val streamOpt = plate.finishBatch(true)
@@ -52,8 +52,8 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       result mustEqual expected
     }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors())
 
-    "correctly the buffers" in {
-      val plate = ReplayPlate[IO](-1).unsafeRunSync()
+    "correctly grow the buffers" in {
+      val plate = ReplayPlate[IO](52428800).unsafeRunSync()
 
       (0 until 131072 + 1) foreach { _ =>
         plate.nul()
@@ -91,6 +91,16 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       cursor.drive(sink)
 
       counter mustEqual (131072 + 1)
+    }
+
+    "produce an error when attempting to grow beyond bounds" in {
+      val plate = ReplayPlate[IO](8200).unsafeRunSync()
+
+      {
+        (0 until 131072 + 1) foreach { _ =>
+          plate.nul()
+        }
+      } must throwAn[IllegalStateException]
     }
   }
 }
