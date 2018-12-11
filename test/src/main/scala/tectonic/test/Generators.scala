@@ -19,7 +19,7 @@ package test
 
 import org.scalacheck.{Arbitrary, Gen}
 
-import scala.{AnyVal, Array, Boolean, Char, Int, Predef, Unit}, Predef._
+import scala.{AnyVal, Array, Boolean, Char, Int, List, Predef, Unit}, Predef._
 import scala.language.postfixOps
 
 import java.lang.SuppressWarnings
@@ -29,28 +29,47 @@ object Generators {
 
   type GenF[A] = Gen[Plate[A] => Unit]
 
-  implicit def arbitraryPlateF[A]: Arbitrary[Plate[A] => Unit] =
-    Arbitrary(genPlate[A])
+  implicit def arbitraryPlateF[A]: Arbitrary[∀[λ[α => Plate[α] => Unit]]] = {
+    // technically this is all safe because we're skolemizing on the Unit
+    val gen = genPlate[Unit] map { f =>
+      new ∀[λ[α => Plate[α] => Unit]] {
+        @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+        def apply[α] = f.asInstanceOf[Plate[α] => Unit]
+      }
+    }
 
-  def genPlate[A]: GenF[A] =
-    Gen.frequency(
+    Arbitrary(gen)
+  }
+
+  @SuppressWarnings(Array("org.wartremover.warts.Recursion"))
+  def genPlate[A]: GenF[A] = {
+    val genSubPlate = Gen.frequency(
       20000 -> genRow[A] *>> genFinishRow[A],
       1 -> genFinishBatch[A])
 
+    for {
+      gfs <- Gen.containerOf[List, Plate[A] => Unit](genSubPlate)
+      gff <- genFinishBatch[A]
+    } yield { p =>
+      gfs.foreach(_(p))
+      gff(p)
+    }
+  }
+
   @SuppressWarnings(Array("org.wartremover.warts.Recursion"))
   def genRow[A]: GenF[A] =
-    Gen.oneOf(
-      genNul[A],
-      genFls[A],
-      genTru[A],
-      genMap[A],
-      genArr[A],
-      genNum[A],
-      genStr[A],
-      Gen.delay(genNestMap[A] *>> genRow[A] *>> genUnnest[A]),
-      Gen.delay(genNestArr[A] *>> genRow[A] *>> genUnnest[A]),
-      Gen.delay(genNestMeta[A] *>> genRow[A] *>> genUnnest[A]),
-      genSkipped[A])
+    Gen.frequency(
+      1 -> genNul[A],
+      1 -> genFls[A],
+      1 -> genTru[A],
+      1 -> genMap[A],
+      1 -> genArr[A],
+      1 -> genNum[A],
+      1 -> genStr[A],
+      3 -> Gen.delay(genNestMap[A] *>> genRow[A] *>> genUnnest[A]),
+      3 -> Gen.delay(genNestArr[A] *>> genRow[A] *>> genUnnest[A]),
+      1 -> Gen.delay(genNestMeta[A] *>> genRow[A] *>> genUnnest[A]),
+      1 -> genSkipped[A])
 
   def genFinishRow[A]: GenF[A] =
     Gen.const(p => p.finishRow())
@@ -188,5 +207,9 @@ object Generators {
         f2(a)
       }
     }
+  }
+
+  trait ∀[F[_]] {
+    def apply[A]: F[A]
   }
 }

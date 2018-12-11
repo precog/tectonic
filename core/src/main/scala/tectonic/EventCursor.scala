@@ -18,6 +18,7 @@ package tectonic
 
 import scala.{sys, Array, Boolean, Int, Long, StringContext, Unit}
 import scala.annotation.switch
+// import scala.Predef, Predef._
 
 import java.lang.{CharSequence, SuppressWarnings}
 
@@ -29,16 +30,23 @@ import java.lang.{CharSequence, SuppressWarnings}
 final class EventCursor private (
     tagBuffer: Array[Long],
     tagLimit: Int,
-    tagSubshiftLimit: Int,
+    tagSubShiftLimit: Int,
     strsBuffer: Array[CharSequence],
     strsLimit: Int,
     intsBuffer: Array[Int],
     intsLimit: Int) {
 
   private[this] final var tagCursor: Int = 0
-  private[this] final var tagSubshiftCursor: Int = 0
+  private[this] final var tagSubShiftCursor: Int = 0
   private[this] final var strsCursor: Int = 0
   private[this] final var intsCursor: Int = 0
+
+  @SuppressWarnings(Array("org.wartremover.warts.While"))
+  def drive(plate: Plate[_]): Unit = {
+    if (tagLimit > 0 || tagSubShiftLimit > 0) {
+      while (next(plate)) {}
+    }
+  }
 
   // TODO skips
   @SuppressWarnings(Array("org.wartremover.warts.Equals"))
@@ -61,18 +69,18 @@ final class EventCursor private (
       case tag => sys.error(s"assertion failed: unrecognized tag = $tag")
     }
 
-    !(tagCursor == tagLimit && tagSubshiftCursor == tagSubshiftLimit)
+    !(tagCursor == tagLimit && tagSubShiftCursor == tagSubShiftLimit)
   }
 
   @SuppressWarnings(Array("org.wartremover.warts.Equals"))
   private[this] final def nextTag(): Int = {
-    val back = ((tagBuffer(tagCursor) >>> tagSubshiftCursor) & 0xF).toInt
+    val back = ((tagBuffer(tagCursor) >>> tagSubShiftCursor) & 0xF).toInt
 
-    if (tagSubshiftCursor == 60) {
+    if (tagSubShiftCursor == 60) {
       tagCursor += 1
-      tagSubshiftCursor = 0
+      tagSubShiftCursor = 0
     } else {
-      tagSubshiftCursor += 4
+      tagSubShiftCursor += 4
     }
 
     back
@@ -92,7 +100,7 @@ final class EventCursor private (
 
   def reset(): Unit = {
     tagCursor = 0
-    tagSubshiftCursor = 0
+    tagSubShiftCursor = 0
     strsCursor = 0
     intsCursor = 0
   }
@@ -119,7 +127,7 @@ object EventCursor {
   private[tectonic] def apply(
       tagBuffer: Array[Long],
       tagLimit: Int,
-      tagSubshiftLimit: Int,
+      tagSubShiftLimit: Int,
       strsBuffer: Array[CharSequence],
       strsLimit: Int,
       intsBuffer: Array[Int],
@@ -128,7 +136,7 @@ object EventCursor {
     new EventCursor(
       tagBuffer,
       tagLimit,
-      tagSubshiftLimit,
+      tagSubShiftLimit,
       strsBuffer,
       strsLimit,
       intsBuffer,

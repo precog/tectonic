@@ -41,7 +41,7 @@ package object json {
 
   def parseAsWithPlate(expected: Event*)(f: Plate[List[Event]] => Plate[List[Event]]): Matcher[String] = { input: String =>
     val resultsF = for {
-      parser <- Parser(ReifiedTerminalPlate[IO].map(f), Parser.ValueStream)
+      parser <- Parser(ReifiedTerminalPlate[IO]().map(f), Parser.ValueStream)
       left <- parser.absorb(input)
       right <- parser.finish
     } yield (left, right)

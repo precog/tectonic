@@ -335,7 +335,7 @@ object ParserSpecs extends Specification {
 
       val eff = for {
         parser <- Parser(
-          ReifiedTerminalPlate[IO].map(targetMask[List[Event]](Right("b"))),
+          ReifiedTerminalPlate[IO]().map(targetMask[List[Event]](Right("b"))),
           Parser.ValueStream)
 
         first <- parser.absorb(input1)

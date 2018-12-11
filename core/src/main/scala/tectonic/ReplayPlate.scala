@@ -19,6 +19,7 @@ package tectonic
 import cats.effect.Sync
 
 import scala.{Array, Boolean, Int, Long, None, Option, Some, Unit}
+// import scala.{Predef, StringContext}, Predef._
 
 import java.lang.{CharSequence, SuppressWarnings, System}
 
@@ -145,7 +146,7 @@ final class ReplayPlate private (limit: Int) extends Plate[Option[EventCursor]] 
   @SuppressWarnings(Array("org.wartremover.warts.Equals"))
   private[this] final def appendTag(tag: Int): Unit = {
     checkTags()
-    tagBuffer(tagPointer) |= tag << tagSubShift
+    tagBuffer(tagPointer) |= tag.toLong << tagSubShift
 
     if (tagSubShift == 60) {
       tagPointer += 1
@@ -158,6 +159,7 @@ final class ReplayPlate private (limit: Int) extends Plate[Option[EventCursor]] 
   @SuppressWarnings(Array("org.wartremover.warts.Equals"))
   private[this] final def checkTags(): Unit = {
     if (tagSubShift == 0 && tagPointer >= tagBuffer.length) {
+      scala.Predef.println("growing")
       val tagBuffer2 = new Array[Long](tagBuffer.length * 2)
       System.arraycopy(tagBuffer, 0, tagBuffer2, 0, tagBuffer.length)
       tagBuffer = tagBuffer2
