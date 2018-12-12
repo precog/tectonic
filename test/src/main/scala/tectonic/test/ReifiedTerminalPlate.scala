@@ -19,7 +19,7 @@ package test
 
 import cats.effect.Sync
 
-import scala.{Array, Boolean, Int, List, Unit}
+import scala.{Array, Boolean, Int, List, Nil, Unit}
 import scala.collection.mutable
 
 import java.lang.{CharSequence, SuppressWarnings}
@@ -29,7 +29,7 @@ import java.lang.{CharSequence, SuppressWarnings}
     "org.wartremover.warts.NonUnitStatements",
     "org.wartremover.warts.Var",
     "org.wartremover.warts.TraversableOps"))
-final class ReifiedTerminalPlate private () extends Plate[List[Event]] {
+final class ReifiedTerminalPlate private (accumToTerminal: Boolean) extends Plate[List[Event]] {
   import Event._
 
   private val events = new mutable.ListBuffer[Event]
@@ -92,9 +92,13 @@ final class ReifiedTerminalPlate private () extends Plate[List[Event]] {
   def finishRow(): Unit = events += FinishRow
 
   def finishBatch(terminal: Boolean): List[Event] = {
-    val back = events.toList
-    events.clear()
-    back
+    if (accumToTerminal || terminal) {
+      val back = events.toList
+      events.clear()
+      back
+    } else {
+      Nil
+    }
   }
 
   override def skipped(bytes: Int): Unit = {
@@ -106,8 +110,9 @@ final class ReifiedTerminalPlate private () extends Plate[List[Event]] {
 
 object ReifiedTerminalPlate {
 
-  def apply[F[_]: Sync]: F[Plate[List[Event]]] =
-    Sync[F].delay(new ReifiedTerminalPlate())
+  @SuppressWarnings(Array("org.wartremover.warts.DefaultArguments"))
+  def apply[F[_]: Sync](accumToTerminal: Boolean = true): F[Plate[List[Event]]] =
+    Sync[F].delay(new ReifiedTerminalPlate(accumToTerminal))
 
   def visit[A](events: List[Event], plate: Plate[A]): A = {
     events foreach {

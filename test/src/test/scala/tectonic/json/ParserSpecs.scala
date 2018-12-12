@@ -149,6 +149,8 @@ object ParserSpecs extends Specification {
 
         def finishRow(): Unit = ()
         def finishBatch(terminal: Boolean): Unit = calls += terminal
+
+        def skipped(bytes: Int) = ()
       }), Parser.ValueStream).unsafeRunSync()
 
       parser.absorb("42").unsafeRunSync() must beRight(())
@@ -178,6 +180,8 @@ object ParserSpecs extends Specification {
 
         def finishRow(): Unit = ()
         def finishBatch(terminal: Boolean): Unit = calls += terminal
+
+        def skipped(bytes: Int) = ()
       }), Parser.ValueStream).unsafeRunSync()
 
       parser.absorb("\"h").unsafeRunSync() must beRight(())
@@ -335,7 +339,7 @@ object ParserSpecs extends Specification {
 
       val eff = for {
         parser <- Parser(
-          ReifiedTerminalPlate[IO].map(targetMask[List[Event]](Right("b"))),
+          ReifiedTerminalPlate[IO]().map(targetMask[List[Event]](Right("b"))),
           Parser.ValueStream)
 
         first <- parser.absorb(input1)
