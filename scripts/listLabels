@@ -1,0 +1,13 @@
+#!/usr/bin/env ruby
+
+require 'octokit'
+
+if ENV['TRAVIS_PULL_REQUEST'] == "false"
+  STDERR.puts 'Cannot list the tags not on a pull request'
+  exit -1
+end
+
+client = Octokit::Client.new :access_token => ENV['GITHUB_TOKEN']
+labels = client.labels_for_issue ENV['TRAVIS_REPO_SLUG'], ENV['TRAVIS_PULL_REQUEST']
+
+labels.each { |l| puts l.name }
