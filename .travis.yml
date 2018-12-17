@@ -51,12 +51,14 @@ jobs:
 after_success:
   - |
     if [ $TRAVIS_PULL_REQUEST != "false" ] && [[ $TRAVIS_PULL_REQUEST_BRANCH =~ 'version-bump' ]]; then
-      clone_dir=$(mktemp -d "/tmp/slamdata-bump.XXXXXXXX")
-      git clone --depth 1 https://$GITHUB_TOKEN@github.com/slamdata/devtools.git $clone_dir
+      if [[ "$(git diff HEAD^ | grep -e '^[-+][0-9]' | sed 's/^[+\-]//' | sed 's/\.[0-9]*$//' | uniq | wc -l)" -eq 2 ]]; then
+        clone_dir=$(mktemp -d "/tmp/slamdata-bump.XXXXXXXX")
+        git clone --depth 1 https://$GITHUB_TOKEN@github.com/slamdata/devtools.git $clone_dir
 
-      for t in "$(scripts/listLabels | grep 'version: revision')"; do
-        $clone_dir/bin/sdmerge $TRAVIS_REPO_SLUG $TRAVIS_PULL_REQUEST
-      done
+        for t in "$(scripts/listLabels | grep 'version: revision')"; do
+          $clone_dir/bin/sdmerge $TRAVIS_REPO_SLUG $TRAVIS_PULL_REQUEST
+        done
+      fi
     fi
 
   - scripts/discordTravisPost success https://discordapp.com/api/webhooks/$DISCORD_WEBHOOK_TOKENS
