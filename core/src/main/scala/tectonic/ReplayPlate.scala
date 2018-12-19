@@ -209,7 +209,9 @@ final class ReplayPlate private (limit: Int) extends Plate[Option[EventCursor]] 
 }
 
 object ReplayPlate {
-  val DefaultBufferSize: Int = 8 * 1024    // 8 KB
+  // this gives us 512 events, which is ample to start, and we'll grow to 8 kb in 7 doubles
+  // generally it just makes us much more efficient in the singleton cartesian case, and not much less efficient in the massive case
+  val DefaultBufferSize: Int = 32
 
   def apply[F[_]: Sync](limit: Int): F[Plate[Option[EventCursor]]] =
     Sync[F].delay(new ReplayPlate(limit))
