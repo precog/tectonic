@@ -53,6 +53,34 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       result mustEqual expected
     }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors())
 
+    "only produce one row at a time" in {
+      val plate = ReplayPlate[IO](52428800).unsafeRunSync()
+      plate.str("first")
+      plate.finishRow()
+      plate.str("second")
+      plate.finishRow()
+
+      val stream = plate.finishBatch(true).get
+
+      val eff = for {
+        firstP <- ReifiedTerminalPlate[IO](false)
+        secondP <- ReifiedTerminalPlate[IO](false)
+
+        row1 <- IO(stream.nextRow(firstP))
+        row2 <- IO(stream.nextRow(secondP))
+
+        firstResults <- IO(firstP.finishBatch(true))
+        secondResults <- IO(secondP.finishBatch(true))
+      } yield (firstResults, row1, secondResults, row2)
+
+      val (firstResults, row1, secondResults, row2) = eff.unsafeRunSync()
+
+      firstResults mustEqual List(Event.Str("first"))
+      row1 mustEqual 0
+      secondResults mustEqual List(Event.Str("second"))
+      row2 mustEqual 2
+    }
+
     "correctly grow the buffers" in {
       val plate = ReplayPlate[IO](52428800).unsafeRunSync()
 

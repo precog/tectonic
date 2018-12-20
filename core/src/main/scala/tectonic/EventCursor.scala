@@ -16,11 +16,11 @@
 
 package tectonic
 
-import scala.{sys, Array, Boolean, Int, Long, StringContext, Unit}
+import scala.{sys, Array, Byte, Int, Long, StringContext, Unit}
 import scala.annotation.switch
 // import scala.Predef, Predef._
 
-import java.lang.{CharSequence, SuppressWarnings}
+import java.lang.{AssertionError, CharSequence, SuppressWarnings}
 
 @SuppressWarnings(
   Array(
@@ -41,35 +41,66 @@ final class EventCursor private (
   private[this] final var strsCursor: Int = 0
   private[this] final var intsCursor: Int = 0
 
-  @SuppressWarnings(Array("org.wartremover.warts.While"))
+  @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.While"))
   def drive(plate: Plate[_]): Unit = {
     if (tagLimit > 0 || tagSubShiftLimit > 0) {
-      while (next(plate)) {}
+      var b: Byte = 0
+      while (b == 0) {
+        b = nextRow(plate)
+
+        if (b != 1) {
+          plate.finishRow()
+        }
+      }
     }
   }
 
+  /**
+   * Returns:
+   *
+   * - `0` if a row has been completed but there is still more data
+   * - `1` if the data stream has terminated without ending the row
+   * - `2` if the data stream has terminated *and* there is no more data
+   */
   // TODO skips
-  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
-  def next(plate: Plate[_]): Boolean = {
-    // we can't use @switch if we use vals here :-(
-    val _ = (nextTag(): @switch) match {
-      case 0x0 => plate.nul()
-      case 0x1 => plate.fls()
-      case 0x2 => plate.tru()
-      case 0x3 => plate.map()
-      case 0x4 => plate.arr()
-      case 0x5 => plate.num(nextStr(), nextInt(), nextInt())
-      case 0x6 => plate.str(nextStr())
-      case 0x7 => plate.nestMap(nextStr())
-      case 0x8 => plate.nestArr()
-      case 0x9 => plate.nestMeta(nextStr())
-      case 0xA => plate.unnest()
-      case 0xB => plate.finishRow()
-      case 0xC => plate.skipped(nextInt())
-      case tag => sys.error(s"assertion failed: unrecognized tag = $tag")
+  @SuppressWarnings(
+    Array(
+      "org.wartremover.warts.Equals",
+      "org.wartremover.warts.While",
+      "org.wartremover.warts.Throw"))
+  def nextRow(plate: Plate[_]): Byte = {
+    var continue = true
+    var hasNext = !(tagCursor == tagLimit && tagSubShiftCursor == tagSubShiftLimit)
+    while (continue && hasNext) {
+      // we can't use @switch if we use vals here :-(
+      val _ = (nextTag(): @switch) match {
+        case 0x0 => plate.nul()
+        case 0x1 => plate.fls()
+        case 0x2 => plate.tru()
+        case 0x3 => plate.map()
+        case 0x4 => plate.arr()
+        case 0x5 => plate.num(nextStr(), nextInt(), nextInt())
+        case 0x6 => plate.str(nextStr())
+        case 0x7 => plate.nestMap(nextStr())
+        case 0x8 => plate.nestArr()
+        case 0x9 => plate.nestMeta(nextStr())
+        case 0xA => plate.unnest()
+        case 0xB => continue = false
+        case 0xC => plate.skipped(nextInt())
+        case tag => sys.error(s"assertion failed: unrecognized tag = $tag")
+      }
+
+      hasNext = !(tagCursor == tagLimit && tagSubShiftCursor == tagSubShiftLimit)
     }
 
-    !(tagCursor == tagLimit && tagSubShiftCursor == tagSubShiftLimit)
+    if (!continue && hasNext)
+      0
+    else if (continue && !hasNext)
+      1
+    else if (!continue && !hasNext)
+      2
+    else
+      throw new AssertionError
   }
 
   def length: Int = tagLimit * (64 / 4) + (tagSubShiftLimit / 4)
