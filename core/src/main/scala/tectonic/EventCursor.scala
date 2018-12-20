@@ -72,6 +72,8 @@ final class EventCursor private (
     !(tagCursor == tagLimit && tagSubShiftCursor == tagSubShiftLimit)
   }
 
+  def length: Int = tagLimit * (64 / 4) + (tagSubShiftLimit / 4)
+
   @SuppressWarnings(Array("org.wartremover.warts.Equals"))
   private[this] final def nextTag(): Int = {
     val back = ((tagBuffer(tagCursor) >>> tagSubShiftCursor) & 0xF).toInt

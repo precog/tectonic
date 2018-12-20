@@ -189,7 +189,7 @@ object Generators {
   }
 
   def genSkipped[A]: GenF[A] = {
-    arbitrary[Int] map { i =>
+    Gen.posNum[Int].filter(_ > 0) map { i =>
       { p =>
         val _ = p.skipped(i)
         ()

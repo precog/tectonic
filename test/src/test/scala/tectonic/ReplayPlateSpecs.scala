@@ -49,6 +49,7 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       } yield (result, expected)
 
       val (result, expected) = eff.unsafeRunSync()
+      stream.length mustEqual expected.length
       result mustEqual expected
     }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors())
 
