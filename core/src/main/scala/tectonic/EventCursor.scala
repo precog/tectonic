@@ -41,6 +41,11 @@ final class EventCursor private (
   private[this] final var strsCursor: Int = 0
   private[this] final var intsCursor: Int = 0
 
+  private[this] final var tagCursorMark: Int = 0
+  private[this] final var tagSubShiftCursorMark: Int = 0
+  private[this] final var strsCursorMark: Int = 0
+  private[this] final var intsCursorMark: Int = 0
+
   @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.While"))
   def drive(plate: Plate[_]): Unit = {
     if (tagLimit > 0 || tagSubShiftLimit > 0) {
@@ -104,6 +109,28 @@ final class EventCursor private (
   }
 
   def length: Int = tagLimit * (64 / 4) + (tagSubShiftLimit / 4)
+
+  /**
+   * Marks the current location for subsequent rewinding. Overwrites any previous
+   * mark.
+   */
+  def mark(): Unit = {
+    tagCursorMark = tagCursor
+    tagSubShiftCursorMark = tagSubShiftCursor
+    strsCursorMark = strsCursor
+    intsCursorMark = intsCursor
+  }
+
+  /**
+   * Rewinds the cursor location to the last mark. If no mark has been set,
+   * it resets to the beginnning of the stream.
+   */
+  def rewind(): Unit = {
+    tagCursor = tagCursorMark
+    tagSubShiftCursor = tagSubShiftCursorMark
+    strsCursor = strsCursorMark
+    intsCursor = intsCursorMark
+  }
 
   @SuppressWarnings(Array("org.wartremover.warts.Equals"))
   private[this] final def nextTag(): Int = {

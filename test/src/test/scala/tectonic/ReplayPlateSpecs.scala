@@ -81,6 +81,62 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       row2 mustEqual 2
     }
 
+    "mark and rewind at arbitrary points" in {
+      val plate = ReplayPlate[IO](52428800).unsafeRunSync()
+      plate.str("first")
+      plate.finishRow()
+      plate.str("second")
+      plate.finishRow()
+
+      val stream = plate.finishBatch(true).get
+
+      val eff = for {
+        firstP <- ReifiedTerminalPlate[IO](false)
+
+        _ <- IO {
+          stream.mark()
+          stream.nextRow(firstP)
+        }
+
+        firstResults <- IO(firstP.finishBatch(true))
+
+        secondP <- ReifiedTerminalPlate[IO](false)
+
+        _ <- IO {
+          stream.rewind()
+          stream.nextRow(secondP)
+        }
+
+        secondResults <- IO(secondP.finishBatch(true))
+
+        thirdP <- ReifiedTerminalPlate[IO](false)
+
+        _ <- IO {
+          stream.mark()
+          stream.nextRow(thirdP)
+        }
+
+        thirdResults <- IO(thirdP.finishBatch(true))
+
+        fourthP <- ReifiedTerminalPlate[IO](false)
+
+        _ <- IO {
+          stream.rewind()
+          stream.nextRow(fourthP)
+        }
+
+        fourthResults <- IO(fourthP.finishBatch(true))
+      } yield (firstResults, secondResults, thirdResults, fourthResults)
+
+      val (firstResults, secondResults, thirdResults, fourthResults) =
+        eff.unsafeRunSync()
+
+      firstResults mustEqual List(Event.Str("first"))
+      secondResults mustEqual List(Event.Str("first"))
+      thirdResults mustEqual List(Event.Str("second"))
+      fourthResults mustEqual List(Event.Str("second"))
+    }
+
     "correctly grow the buffers" in {
       val plate = ReplayPlate[IO](52428800).unsafeRunSync()
 
