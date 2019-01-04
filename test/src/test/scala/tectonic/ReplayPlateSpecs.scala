@@ -53,6 +53,89 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       result mustEqual expected
     }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors())
 
+    "only produce one row at a time" in {
+      val plate = ReplayPlate[IO](52428800).unsafeRunSync()
+      plate.str("first")
+      plate.finishRow()
+      plate.str("second")
+      plate.finishRow()
+
+      val stream = plate.finishBatch(true).get
+
+      val eff = for {
+        firstP <- ReifiedTerminalPlate[IO](false)
+        secondP <- ReifiedTerminalPlate[IO](false)
+
+        row1 <- IO(stream.nextRow(firstP))
+        row2 <- IO(stream.nextRow(secondP))
+
+        firstResults <- IO(firstP.finishBatch(true))
+        secondResults <- IO(secondP.finishBatch(true))
+      } yield (firstResults, row1, secondResults, row2)
+
+      val (firstResults, row1, secondResults, row2) = eff.unsafeRunSync()
+
+      firstResults mustEqual List(Event.Str("first"))
+      row1 mustEqual 0
+      secondResults mustEqual List(Event.Str("second"))
+      row2 mustEqual 2
+    }
+
+    "mark and rewind at arbitrary points" in {
+      val plate = ReplayPlate[IO](52428800).unsafeRunSync()
+      plate.str("first")
+      plate.finishRow()
+      plate.str("second")
+      plate.finishRow()
+
+      val stream = plate.finishBatch(true).get
+
+      val eff = for {
+        firstP <- ReifiedTerminalPlate[IO](false)
+
+        _ <- IO {
+          stream.nextRow(firstP)
+        }
+
+        firstResults <- IO(firstP.finishBatch(true))
+
+        secondP <- ReifiedTerminalPlate[IO](false)
+
+        _ <- IO {
+          stream.rewind()
+          stream.nextRow(secondP)
+        }
+
+        secondResults <- IO(secondP.finishBatch(true))
+
+        thirdP <- ReifiedTerminalPlate[IO](false)
+
+        _ <- IO {
+          stream.mark()
+          stream.nextRow(thirdP)
+        }
+
+        thirdResults <- IO(thirdP.finishBatch(true))
+
+        fourthP <- ReifiedTerminalPlate[IO](false)
+
+        _ <- IO {
+          stream.rewind()
+          stream.nextRow(fourthP)
+        }
+
+        fourthResults <- IO(fourthP.finishBatch(true))
+      } yield (firstResults, secondResults, thirdResults, fourthResults)
+
+      val (firstResults, secondResults, thirdResults, fourthResults) =
+        eff.unsafeRunSync()
+
+      firstResults mustEqual List(Event.Str("first"))
+      secondResults mustEqual List(Event.Str("first"))
+      thirdResults mustEqual List(Event.Str("second"))
+      fourthResults mustEqual List(Event.Str("second"))
+    }
+
     "correctly grow the buffers" in {
       val plate = ReplayPlate[IO](52428800).unsafeRunSync()
 

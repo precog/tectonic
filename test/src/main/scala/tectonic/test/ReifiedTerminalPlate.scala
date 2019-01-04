@@ -114,7 +114,7 @@ object ReifiedTerminalPlate {
   def apply[F[_]: Sync](accumToTerminal: Boolean = true): F[Plate[List[Event]]] =
     Sync[F].delay(new ReifiedTerminalPlate(accumToTerminal))
 
-  def visit[A](events: List[Event], plate: Plate[A]): A = {
+  def visit[F[_]: Sync, A](events: List[Event], plate: Plate[A]): F[A] = Sync[F] delay {
     events foreach {
       case Event.Nul => plate.nul()
       case Event.Fls => plate.fls()
