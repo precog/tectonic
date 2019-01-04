@@ -123,7 +123,7 @@ final class EventCursor private (
 
   /**
    * Rewinds the cursor location to the last mark. If no mark has been set,
-   * it resets to the beginnning of the stream.
+   * it resets to the beginning of the stream.
    */
   def rewind(): Unit = {
     tagCursor = tagCursorMark
