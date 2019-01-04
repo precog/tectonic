@@ -94,7 +94,6 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
         firstP <- ReifiedTerminalPlate[IO](false)
 
         _ <- IO {
-          stream.mark()
           stream.nextRow(firstP)
         }
 
