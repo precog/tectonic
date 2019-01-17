@@ -16,11 +16,11 @@
 
 package tectonic
 
-import scala.{sys, Array, Byte, Int, Long, StringContext, Unit}
+import scala.{sys, Array, Byte, Int, List, Long, StringContext, Predef, Unit}, Predef._
 import scala.annotation.switch
-// import scala.Predef, Predef._
+import scala.collection.mutable
 
-import java.lang.{AssertionError, CharSequence, SuppressWarnings}
+import java.lang.{AssertionError, CharSequence, SuppressWarnings, System}
 
 @SuppressWarnings(
   Array(
@@ -109,6 +109,82 @@ final class EventCursor private (
   }
 
   def length: Int = tagLimit * (64 / 4) + (tagSubShiftLimit / 4)
+
+  @SuppressWarnings(
+    Array(
+      "org.wartremover.warts.Equals",
+      "org.wartremover.warts.MutableDataStructures",
+      "org.wartremover.warts.NonUnitStatements",
+      "org.wartremover.warts.While"))
+  def subdivide(bound: Int): List[EventCursor] = {
+    val back = mutable.ListBuffer[EventCursor]()
+    val increment = bound / (64 / 4)
+
+    (0 until tagLimit by increment).foldLeft((0, 0)) {
+      case ((so, io), b) =>
+        val last = b < tagLimit - increment
+        val length = if (last || tagSubShiftLimit == 0)
+          increment
+        else
+          increment + 1
+
+        val tagBuffer2 = new Array[Long](length)
+        System.arraycopy(tagBuffer, b, tagBuffer2, 0, length)
+
+        var strCount = 0
+        var intCount = 0
+
+        if (last) {
+          strCount = strsLimit - so
+          intCount = intsLimit - io
+        } else {
+          var i = 0
+          while (i < length) {
+            val tag = tagBuffer2(i)
+
+            var offset = 0
+            while (offset < 64 / 4) {   // we don't have to worry about tagSubshiftLimit, since we're not here if (last)
+              (((tag >>> offset) & 0xF).toInt: @switch) match {
+                case 0x5 =>
+                  strCount += 1
+                  intCount += 2
+
+                case 0x6 | 0x7 | 0x9 =>
+                  strCount += 1
+
+                case 0xC =>
+                  intCount += 1
+
+                case _ =>
+              }
+
+              offset += 1
+            }
+
+            i += 1
+          }
+        }
+
+        val strsBuffer2 = new Array[CharSequence](strCount)
+        System.arraycopy(strsBuffer, so, strsBuffer2, 0, strCount)
+
+        val intsBuffer2 = new Array[Int](intCount)
+        System.arraycopy(intsBuffer, so, intsBuffer2, 0, intCount)
+
+        back += new EventCursor(
+          tagBuffer2,
+          length,
+          if (last) tagSubShiftLimit else 64,
+          strsBuffer2,
+          strCount,
+          intsBuffer2,
+          intCount)
+
+        (so + strCount, io + intCount)
+    }
+
+    back.toList
+  }
 
   /**
    * Marks the current location for subsequent rewinding. Overwrites any previous
