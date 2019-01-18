@@ -104,7 +104,7 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
             val lengths = partitions.map(_.length)
 
             lengths.sum mustEqual stream.length
-            lengths must contain(be_>=(size))
+            lengths must contain(be_>=((size / 16) * 16))
 
             val origEff =
               ReifiedTerminalPlate[IO](false) flatMap { plate =>

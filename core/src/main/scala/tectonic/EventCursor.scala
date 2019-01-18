@@ -123,7 +123,7 @@ final class EventCursor private (
     }
 
     val back = mutable.ListBuffer[EventCursor]()
-    val increment = math.ceil(bound.toFloat / (64 / 4)).toInt
+    val increment = math.max(math.round(bound.toFloat / (64 / 4)).toInt, 1)
 
     (0 until (tagLimit + 1) by increment).foldLeft((0, 0)) {
       case ((so, io), b) =>
