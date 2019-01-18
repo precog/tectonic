@@ -18,13 +18,16 @@ package tectonic
 package test
 
 import cats.effect.IO
+import cats.instances.list._
+import cats.syntax.flatMap._
+import cats.syntax.traverse._
 
 import org.specs2.ScalaCheck
 import org.specs2.mutable._
 
-import scala.{Boolean, Int, List, Option, Predef, Unit}, Predef._
+import scala.{math, Boolean, Int, List, Option, Predef, Unit}, Predef._
 
-import java.lang.{CharSequence, IllegalStateException, Runtime}
+import java.lang.{CharSequence, IllegalArgumentException, IllegalStateException, Runtime}
 
 object ReplayPlateSpecs extends Specification with ScalaCheck {
   import Generators._
@@ -80,6 +83,48 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       secondResults mustEqual List(Event.Str("second"))
       row2 mustEqual 2
     }
+
+    "retain events when subdividing into multiple buffers" in prop { (driver: ∀[λ[α => Plate[α] => Unit]], size0: Int) =>
+      (size0 > Int.MinValue) ==> {
+        val plate = ReplayPlate[IO](52428800).unsafeRunSync()
+        driver[Option[EventCursor]](plate)
+
+        val stream = plate.finishBatch(true).get
+
+        (stream.length > 0) ==> {
+          val size = math.abs(size0) % stream.length
+
+          if (size == 0) {
+            stream.subdivide(size) must throwAn[IllegalArgumentException]
+          } else {
+            val partitions = stream.subdivide(size)
+
+            partitions must haveSize(be_>=(1))
+
+            val lengths = partitions.map(_.length)
+
+            lengths.sum mustEqual stream.length
+            lengths must contain(be_>=(size))
+
+            val origEff =
+              ReifiedTerminalPlate[IO](false) flatMap { plate =>
+                IO(stream.drive(plate)) >> IO(plate.finishBatch(true))
+              }
+
+            val partEff = partitions traverse { substream =>
+              ReifiedTerminalPlate[IO](false) flatMap { plate =>
+                IO(substream.drive(plate)) >> IO(plate.finishBatch(true))
+              }
+            }
+
+            val originalResults = origEff.unsafeRunSync()
+            val partitionResults = partEff.unsafeRunSync().flatten
+
+            originalResults mustEqual partitionResults
+          }
+        }
+      }
+    }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors())
 
     "mark and rewind at arbitrary points" in {
       val plate = ReplayPlate[IO](52428800).unsafeRunSync()
