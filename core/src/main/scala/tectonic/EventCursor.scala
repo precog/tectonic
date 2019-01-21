@@ -127,7 +127,7 @@ final class EventCursor private (
 
     (0 until (tagLimit + 1) by increment).foldLeft((0, 0)) {
       case ((strsOffset, intsOffset), current) =>
-        val last = !(current < tagLimit + 1 - increment)
+        val last = current + increment > tagLimit
 
         val length = if (last)
           tagLimit + 1 - current
