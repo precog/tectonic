@@ -126,23 +126,23 @@ final class EventCursor private (
     val increment = math.max(math.round(bound.toFloat / (64 / 4)).toInt, 1)
 
     (0 until (tagLimit + 1) by increment).foldLeft((0, 0)) {
-      case ((so, io), b) =>
-        val last = !(b < tagLimit + 1 - increment)
+      case ((strsOffset, intsOffset), current) =>
+        val last = !(current < tagLimit + 1 - increment)
 
         val length = if (last)
-          tagLimit + 1 - b
+          tagLimit + 1 - current
         else
           increment
 
         val tagBuffer2 = new Array[Long](length)
-        System.arraycopy(tagBuffer, b, tagBuffer2, 0, length)
+        System.arraycopy(tagBuffer, current, tagBuffer2, 0, length)
 
         var strCount = 0
         var intCount = 0
 
         if (last) {
-          strCount = strsLimit - so
-          intCount = intsLimit - io
+          strCount = strsLimit - strsOffset
+          intCount = intsLimit - intsOffset
         } else {
           var i = 0
           while (i < length) {
@@ -172,10 +172,10 @@ final class EventCursor private (
         }
 
         val strsBuffer2 = new Array[CharSequence](strCount)
-        System.arraycopy(strsBuffer, so, strsBuffer2, 0, strCount)
+        System.arraycopy(strsBuffer, strsOffset, strsBuffer2, 0, strCount)
 
         val intsBuffer2 = new Array[Int](intCount)
-        System.arraycopy(intsBuffer, io, intsBuffer2, 0, intCount)
+        System.arraycopy(intsBuffer, intsOffset, intsBuffer2, 0, intCount)
 
         back += new EventCursor(
           tagBuffer2,
@@ -186,7 +186,7 @@ final class EventCursor private (
           intsBuffer2,
           intCount)
 
-        (so + strCount, io + intCount)
+        (strsOffset + strCount, intsOffset + intCount)
     }
 
     back.toList
