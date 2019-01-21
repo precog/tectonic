@@ -149,7 +149,7 @@ final class EventCursor private (
             val tag = tagBuffer2(i)
 
             var offset = 0
-            while (offset < 64) {   // we don't have to worry about tagSubshiftLimit, since we're not here if (last)
+            while (offset < 64) {   // we don't have to worry about tagSubShiftLimit, since we're not here if (last)
               (((tag >>> offset) & 0xF).toInt: @switch) match {
                 case 0x5 =>
                   strCount += 1
