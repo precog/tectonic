@@ -165,6 +165,17 @@ final class EventCursor private (
     intsCursor = 0
   }
 
+  def copy(): EventCursor = {
+    new EventCursor(
+      tagBuffer,
+      tagLimit,
+      tagSubShiftLimit,
+      strsBuffer,
+      strsLimit,
+      intsBuffer,
+      intsLimit)
+  }
+
   // this will handle disk cleanup
   def finish(): Unit = ()
 }
