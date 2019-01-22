@@ -16,7 +16,7 @@
 
 package tectonic.json
 
-import jawn.{Facade, RawFContext}
+import org.typelevel.jawn.{Facade, RawFContext}
 
 import org.openjdk.jmh.infra.Blackhole
 
