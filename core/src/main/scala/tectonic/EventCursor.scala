@@ -16,11 +16,11 @@
 
 package tectonic
 
-import scala.{sys, Array, Byte, Int, Long, StringContext, Unit}
+import scala.{math, sys, Array, Byte, Int, List, Long, StringContext, Predef, Unit}, Predef._
 import scala.annotation.switch
-// import scala.Predef, Predef._
+import scala.collection.mutable
 
-import java.lang.{AssertionError, CharSequence, SuppressWarnings}
+import java.lang.{AssertionError, CharSequence, IllegalArgumentException, SuppressWarnings, System}
 
 @SuppressWarnings(
   Array(
@@ -110,8 +110,95 @@ final class EventCursor private (
 
   def length: Int = tagLimit * (64 / 4) + (tagSubShiftLimit / 4)
 
+  @SuppressWarnings(
+    Array(
+      "org.wartremover.warts.Equals",
+      "org.wartremover.warts.MutableDataStructures",
+      "org.wartremover.warts.NonUnitStatements",
+      "org.wartremover.warts.While",
+      "org.wartremover.warts.Throw"))
+  def subdivide(bound: Int): List[EventCursor] = {
+    if (bound <= 0) {
+      throw new IllegalArgumentException(bound.toString)
+    }
+
+    val back = mutable.ListBuffer[EventCursor]()
+    val increment = math.max(math.round(bound.toFloat / (64 / 4)).toInt, 1)
+
+    val lastOffset = if (tagSubShiftLimit == 0) 0 else 1
+
+    (0 until (tagLimit + lastOffset) by increment).foldLeft((0, 0)) {
+      case ((strsOffset, intsOffset), cursor) =>
+        val last = if (tagSubShiftLimit == 0)
+          cursor + increment >= tagLimit
+        else
+          cursor + increment > tagLimit
+
+        val length = if (last)
+          tagLimit + lastOffset - cursor
+        else
+          increment
+
+        val tagBuffer2 = new Array[Long](length)
+        System.arraycopy(tagBuffer, cursor, tagBuffer2, 0, length)
+
+        var strCount = 0
+        var intCount = 0
+
+        if (last) {
+          strCount = strsLimit - strsOffset
+          intCount = intsLimit - intsOffset
+        } else {
+          var i = 0
+          while (i < length) {
+            val tag = tagBuffer2(i)
+
+            var offset = 0
+            while (offset < 64) {   // we don't have to worry about tagSubShiftLimit, since we're not here if (last)
+              (((tag >>> offset) & 0xF).toInt: @switch) match {
+                case 0x5 =>
+                  strCount += 1
+                  intCount += 2
+
+                case 0x6 | 0x7 | 0x9 =>
+                  strCount += 1
+
+                case 0xC =>
+                  intCount += 1
+
+                case _ =>
+              }
+
+              offset += 4
+            }
+
+            i += 1
+          }
+        }
+
+        val strsBuffer2 = new Array[CharSequence](strCount)
+        System.arraycopy(strsBuffer, strsOffset, strsBuffer2, 0, strCount)
+
+        val intsBuffer2 = new Array[Int](intCount)
+        System.arraycopy(intsBuffer, intsOffset, intsBuffer2, 0, intCount)
+
+        back += EventCursor(
+          tagBuffer2,
+          if (last) length - lastOffset else length,
+          if (last) tagSubShiftLimit else 0,
+          strsBuffer2,
+          strCount,
+          intsBuffer2,
+          intCount)
+
+        (strsOffset + strCount, intsOffset + intCount)
+    }
+
+    back.toList
+  }
+
   /**
-   * Marks the current location for subsequent rewinding. Overwrites any previous
+   * Marks the cursor location for subsequent rewinding. Overwrites any previous
    * mark.
    */
   def mark(): Unit = {
