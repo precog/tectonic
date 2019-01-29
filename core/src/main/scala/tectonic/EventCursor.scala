@@ -125,17 +125,22 @@ final class EventCursor private (
     val back = mutable.ListBuffer[EventCursor]()
     val increment = math.max(math.round(bound.toFloat / (64 / 4)).toInt, 1)
 
-    (0 until (tagLimit + 1) by increment).foldLeft((0, 0)) {
-      case ((strsOffset, intsOffset), current) =>
-        val last = current + increment > tagLimit
+    val lastOffset = if (tagSubShiftLimit == 0) 0 else 1
+
+    (0 until (tagLimit + lastOffset) by increment).foldLeft((0, 0)) {
+      case ((strsOffset, intsOffset), cursor) =>
+        val last = if (tagSubShiftLimit == 0)
+          cursor + increment >= tagLimit
+        else
+          cursor + increment > tagLimit
 
         val length = if (last)
-          tagLimit + 1 - current
+          tagLimit + lastOffset - cursor
         else
           increment
 
         val tagBuffer2 = new Array[Long](length)
-        System.arraycopy(tagBuffer, current, tagBuffer2, 0, length)
+        System.arraycopy(tagBuffer, cursor, tagBuffer2, 0, length)
 
         var strCount = 0
         var intCount = 0
@@ -177,9 +182,9 @@ final class EventCursor private (
         val intsBuffer2 = new Array[Int](intCount)
         System.arraycopy(intsBuffer, intsOffset, intsBuffer2, 0, intCount)
 
-        back += new EventCursor(
+        back += EventCursor(
           tagBuffer2,
-          if (last && tagSubShiftLimit < 64) length - 1 else length,
+          if (last) length - lastOffset else length,
           if (last) tagSubShiftLimit else 0,
           strsBuffer2,
           strCount,
@@ -193,7 +198,7 @@ final class EventCursor private (
   }
 
   /**
-   * Marks the current location for subsequent rewinding. Overwrites any previous
+   * Marks the cursor location for subsequent rewinding. Overwrites any previous
    * mark.
    */
   def mark(): Unit = {
