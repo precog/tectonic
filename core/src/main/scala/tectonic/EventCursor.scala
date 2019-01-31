@@ -29,22 +29,26 @@ import java.lang.{AssertionError, CharSequence, IllegalArgumentException, Suppre
     "org.wartremover.warts.Var"))
 final class EventCursor private (
     tagBuffer: Array[Long],
+    tagOffset: Int,
+    tagSubShiftOffset: Int,
     tagLimit: Int,
     tagSubShiftLimit: Int,
     strsBuffer: Array[CharSequence],
+    strsOffset: Int,
     strsLimit: Int,
     intsBuffer: Array[Int],
+    intsOffset: Int,
     intsLimit: Int) {
 
-  private[this] final var tagCursor: Int = 0
-  private[this] final var tagSubShiftCursor: Int = 0
-  private[this] final var strsCursor: Int = 0
-  private[this] final var intsCursor: Int = 0
+  private[this] final var tagCursor: Int = tagOffset
+  private[this] final var tagSubShiftCursor: Int = tagSubShiftOffset
+  private[this] final var strsCursor: Int = strsOffset
+  private[this] final var intsCursor: Int = intsOffset
 
-  private[this] final var tagCursorMark: Int = 0
-  private[this] final var tagSubShiftCursorMark: Int = 0
-  private[this] final var strsCursorMark: Int = 0
-  private[this] final var intsCursorMark: Int = 0
+  private[this] final var tagCursorMark: Int = tagOffset
+  private[this] final var tagSubShiftCursorMark: Int = tagSubShiftOffset
+  private[this] final var strsCursorMark: Int = strsOffset
+  private[this] final var intsCursorMark: Int = intsOffset
 
   @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.While"))
   def drive(plate: Plate[_]): Unit = {
@@ -108,7 +112,8 @@ final class EventCursor private (
       throw new AssertionError
   }
 
-  def length: Int = tagLimit * (64 / 4) + (tagSubShiftLimit / 4)
+  def length: Int =
+    (tagLimit * (64 / 4) + (tagSubShiftLimit / 4)) - (tagOffset * (64 / 4) + (tagSubShiftOffset / 4))
 
   @SuppressWarnings(
     Array(
@@ -246,20 +251,24 @@ final class EventCursor private (
   }
 
   def reset(): Unit = {
-    tagCursor = 0
-    tagSubShiftCursor = 0
-    strsCursor = 0
-    intsCursor = 0
+    tagCursor = tagOffset
+    tagSubShiftCursor = tagSubShiftOffset
+    strsCursor = strsOffset
+    intsCursor = intsOffset
   }
 
   def copy(): EventCursor = {
     new EventCursor(
       tagBuffer,
+      tagOffset,
+      tagSubShiftOffset,
       tagLimit,
       tagSubShiftLimit,
       strsBuffer,
+      strsOffset,
       strsLimit,
       intsBuffer,
+      intsOffset,
       intsLimit)
   }
 
@@ -293,10 +302,14 @@ object EventCursor {
       : EventCursor =
     new EventCursor(
       tagBuffer,
+      0,
+      0,
       tagLimit,
       tagSubShiftLimit,
       strsBuffer,
+      0,
       strsLimit,
       intsBuffer,
+      0,
       intsLimit)
 }
