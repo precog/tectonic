@@ -100,9 +100,9 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
             val partitions = stream.subdivide(size)
 
             partitions must haveSize(be_>=(1))
+            partitions.map(countRows).sum mustEqual countRows(stream)
 
             val lengths = partitions.map(_.length)
-
             lengths.sum mustEqual stream.length
             lengths must contain(be_>=((size / 16) * 16))
 
@@ -231,5 +231,34 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
         }
       } must throwAn[IllegalStateException]
     }
+  }
+
+  def countRows(ec: EventCursor): Int = {
+    var count = if (ec.length > 0) 1 else 0
+
+    while (ec.nextRow(NullPlate) == 0) {
+      count += 1
+    }
+
+    ec.reset()
+
+    count
+  }
+
+  object NullPlate extends Plate[Unit] {
+    def arr() = Signal.Continue
+    def finishBatch(terminal: Boolean) = ()
+    def finishRow() = ()
+    def fls() = Signal.Continue
+    def map() = Signal.Continue
+    def nestArr() = Signal.Continue
+    def nestMap(pathComponent: CharSequence) = Signal.Continue
+    def nestMeta(pathComponent: CharSequence) = Signal.Continue
+    def nul() = Signal.Continue
+    def num(s: CharSequence,decIdx: Int,expIdx: Int) = Signal.Continue
+    def skipped(bytes: Int) = ()
+    def str(s: CharSequence) = Signal.Continue
+    def tru() = Signal.Continue
+    def unnest() = Signal.Continue
   }
 }

@@ -66,8 +66,8 @@ object Generators {
       1 -> genArr[A],
       1 -> genNum[A],
       1 -> genStr[A],
-      3 -> Gen.delay(genNestMap[A] *>> genRow[A] *>> genUnnest[A]),
-      3 -> Gen.delay(genNestArr[A] *>> genRow[A] *>> genUnnest[A]),
+      5 -> Gen.delay(genNestMap[A] *>> genRow[A] *>> genUnnest[A]),
+      5 -> Gen.delay(genNestArr[A] *>> genRow[A] *>> genUnnest[A]),
       1 -> Gen.delay(genNestMeta[A] *>> genRow[A] *>> genUnnest[A]),
       1 -> genSkipped[A])
 
