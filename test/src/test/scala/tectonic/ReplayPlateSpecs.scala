@@ -98,14 +98,13 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
             stream.subdivide(size) must throwAn[IllegalArgumentException]
           } else {
             val partitions = stream.subdivide(size)
+
             partitions must haveSize(be_>=(1))
+            partitions.map(countRows).sum mustEqual countRows(stream)
 
             val lengths = partitions.map(_.length)
-
             lengths.sum mustEqual stream.length
             lengths must contain(be_>=((size / 16) * 16))
-
-            partitions.map(countRows).sum mustEqual countRows(stream)
 
             val origEff =
               ReifiedTerminalPlate[IO](false) flatMap { plate =>
@@ -125,7 +124,7 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
           }
         }
       }
-    }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors()).pendingUntilFixed
+    }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors())
 
     "mark and rewind at arbitrary points" in {
       val plate = ReplayPlate[IO](52428800).unsafeRunSync()
@@ -240,6 +239,8 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
     while (ec.nextRow(NullPlate) == 0) {
       count += 1
     }
+
+    ec.reset()
 
     count
   }

@@ -16,11 +16,14 @@
 
 package tectonic
 
-import scala.{math, sys, Array, Byte, Int, List, Long, StringContext, Predef, Unit}, Predef._
+import cats.instances.int._
+import cats.syntax.eq._
+
+import scala._, Predef._
 import scala.annotation.switch
 import scala.collection.mutable
 
-import java.lang.{AssertionError, CharSequence, IllegalArgumentException, SuppressWarnings, System}
+import java.lang.{AssertionError, CharSequence, IllegalArgumentException, SuppressWarnings}
 
 @SuppressWarnings(
   Array(
@@ -67,9 +70,9 @@ final class EventCursor private (
   /**
    * Returns:
    *
-   * - `0` if a row has been completed but there is still more data
+   * - `0` if a row has ended but there is still more data
    * - `1` if the data stream has terminated without ending the row
-   * - `2` if the data stream has terminated *and* there is no more data
+   * - `2` if the data stream has terminated *and* the row has ended
    */
   // TODO skips
   @SuppressWarnings(
@@ -128,76 +131,113 @@ final class EventCursor private (
     }
 
     val back = mutable.ListBuffer[EventCursor]()
-    val increment = math.max(math.round(bound.toFloat / (64 / 4)).toInt, 1)
+    val semanticMax = tagLimit * (64 / 4) + (tagSubShiftLimit / 4)
 
-    val lastOffset = if (tagSubShiftLimit == 0) 0 else 1
+    @SuppressWarnings(Array("org.wartremover.warts.Recursion"))
+    def pushNext(tagFrom: Int, tagFromSubShift: Int, strsFrom: Int, intsFrom: Int, cheatUp: Boolean): Unit = {
+      if (tagFrom < tagLimit || tagFromSubShift < tagSubShiftLimit) {
+        val semanticTargetIndex =
+          math.min((tagFrom * (64 / 4)) + (tagFromSubShift / 4) + bound, semanticMax)
 
-    (0 until (tagLimit + lastOffset) by increment).foldLeft((0, 0)) {
-      case ((strsOffset, intsOffset), cursor) =>
-        val last = if (tagSubShiftLimit == 0)
-          cursor + increment >= tagLimit
-        else
-          cursor + increment > tagLimit
+        val idealTagTargetIndex = semanticTargetIndex / (64 / 4)
 
-        val length = if (last)
-          tagLimit + lastOffset - cursor
-        else
-          increment
+        def attemptTarget(tagTargetIndex: Int, offsetBound: Int) = {
+          val targetRowOffset = if (tagTargetIndex == tagLimit)
+            tagSubShiftLimit
+          else
+            findRowBoundary(tagBuffer(tagTargetIndex), offsetBound)
 
-        val tagBuffer2 = new Array[Long](length)
-        System.arraycopy(tagBuffer, cursor, tagBuffer2, 0, length)
+          if (tagTargetIndex <= tagLimit && targetRowOffset >= 0) {
+            val tagOffset2 = tagFrom
+            val tagSubShiftOffset2 = tagFromSubShift
 
-        var strCount = 0
-        var intCount = 0
+            // TODO tagLimit2 - 1?
+            val (tagLimit2, tagSubShiftLimit2) = if (tagTargetIndex == tagLimit)
+              (tagLimit, tagSubShiftLimit)
+            else if (targetRowOffset == 60)
+              (tagTargetIndex + 1, 0)
+            else
+              (tagTargetIndex, targetRowOffset + 4)
 
-        if (last) {
-          strCount = strsLimit - strsOffset
-          intCount = intsLimit - intsOffset
-        } else {
-          var i = 0
-          while (i < length) {
-            val tag = tagBuffer2(i)
+            val strsOffset2 = strsFrom
+            val intsOffset2 = intsFrom
 
-            var offset = 0
-            while (offset < 64) {   // we don't have to worry about tagSubShiftLimit, since we're not here if (last)
-              (((tag >>> offset) & 0xF).toInt: @switch) match {
-                case 0x5 =>
-                  strCount += 1
-                  intCount += 2
+            val (strsCount, intsCount) =
+              countStrsInts(tagOffset2, tagSubShiftOffset2, tagLimit2, tagSubShiftLimit2)
 
-                case 0x6 | 0x7 | 0x9 =>
-                  strCount += 1
+            val strsLimit2 = strsOffset2 + strsCount
+            val intsLimit2 = intsOffset2 + intsCount
 
-                case 0xC =>
-                  intCount += 1
+            back += new EventCursor(
+              tagBuffer,
+              tagOffset2,
+              tagSubShiftOffset2,
+              tagLimit2,
+              tagSubShiftLimit2,
+              strsBuffer,
+              strsOffset2,
+              strsLimit2,
+              intsBuffer,
+              intsOffset2,
+              intsLimit2)
 
-                case _ =>
-              }
-
-              offset += 4
-            }
-
-            i += 1
+            Some((tagLimit2, tagSubShiftLimit2, strsLimit2, intsLimit2))
+          } else {
+            None
           }
         }
 
-        val strsBuffer2 = new Array[CharSequence](strCount)
-        System.arraycopy(strsBuffer, strsOffset, strsBuffer2, 0, strCount)
+        val idealResults = attemptTarget(
+          idealTagTargetIndex,
+          if (idealTagTargetIndex == tagFrom) tagFromSubShift else 0)
 
-        val intsBuffer2 = new Array[Int](intCount)
-        System.arraycopy(intsBuffer, intsOffset, intsBuffer2, 0, intCount)
+        def iterateFit(lowerTagTargetIndex: Int, upperTagTargetIndex: Int): Unit = {
+          val results = if (upperTagTargetIndex <= tagLimit) {
+            if (lowerTagTargetIndex > tagFrom) {
+              if (cheatUp)
+                attemptTarget(upperTagTargetIndex, 0)
+              else
+                attemptTarget(lowerTagTargetIndex, 0)
+            } else {
+              attemptTarget(upperTagTargetIndex, 0)
+            }
+          } else if (lowerTagTargetIndex > tagFrom) {
+            attemptTarget(lowerTagTargetIndex, 0)
+          } else {
+            sys.error("impossible; this means we walked off the end and didn't realize it")
+          }
 
-        back += EventCursor(
-          tagBuffer2,
-          if (last) length - lastOffset else length,
-          if (last) tagSubShiftLimit else 0,
-          strsBuffer2,
-          strCount,
-          intsBuffer2,
-          intCount)
+          results match {
+            case Some((tagLimit2, tagSubShiftLimit2, strsLimit2, intsLimit2)) =>
+              pushNext(
+                tagLimit2,
+                tagSubShiftLimit2,
+                strsLimit2,
+                intsLimit2,
+                tagLimit2 == lowerTagTargetIndex)
 
-        (strsOffset + strCount, intsOffset + intCount)
+            case None =>
+              iterateFit(lowerTagTargetIndex - 1, upperTagTargetIndex + 1)
+          }
+        }
+
+        // TODO deduplicate?
+        idealResults match {
+          case Some((tagLimit2, tagSubShiftLimit2, strsLimit2, intsLimit2)) =>
+            pushNext(
+              tagLimit2,
+              tagSubShiftLimit2,
+              strsLimit2,
+              intsLimit2,
+              cheatUp)
+
+          case None =>
+            iterateFit(idealTagTargetIndex - 1, idealTagTargetIndex + 1)
+        }
+      }
     }
+
+    pushNext(tagOffset, tagSubShiftOffset, strsOffset, intsOffset, true)
 
     back.toList
   }
@@ -222,6 +262,74 @@ final class EventCursor private (
     tagSubShiftCursor = tagSubShiftCursorMark
     strsCursor = strsCursorMark
     intsCursor = intsCursorMark
+  }
+
+  @SuppressWarnings(
+    Array(
+      "org.wartremover.warts.Equals",
+      "org.wartremover.warts.While",
+      "org.wartremover.warts.Return"))
+  private[this] final def findRowBoundary(tag: Long, initOffset: Int): Int = {
+    var offset = initOffset
+    while (offset < 64) {
+      if (((tag >>> offset) & 0xF).toInt == 0xB) {
+        return offset
+      }
+
+      offset += 4
+    }
+
+    -1
+  }
+
+  @SuppressWarnings(
+    Array(
+      "org.wartremover.warts.Equals",
+      "org.wartremover.warts.While"))
+  private[this] final def countStrsInts(
+      from: Int,
+      fromSubShift: Int,
+      to: Int,
+      toSubShift: Int): (Int, Int) = {
+
+    var strsCount = 0
+    var intsCount = 0
+
+    val limit = if (toSubShift == 0) to else to + 1
+    var i = from
+    var offset = fromSubShift
+
+    while (i < limit) {
+      val tag = tagBuffer(i)
+
+      val offsetBound = if (i == limit - 1 && toSubShift != 0)
+        toSubShift
+      else
+        64
+
+      while (offset < offsetBound) {
+        (((tag >>> offset) & 0xF).toInt: @switch) match {
+          case 0x5 =>
+            strsCount += 1
+            intsCount += 2
+
+          case 0x6 | 0x7 | 0x9 =>
+            strsCount += 1
+
+          case 0xC =>
+            intsCount += 1
+
+          case _ =>
+        }
+
+        offset += 4
+      }
+
+      offset = 0
+      i += 1
+    }
+
+    (strsCount, intsCount)
   }
 
   @SuppressWarnings(Array("org.wartremover.warts.Equals"))
@@ -274,6 +382,30 @@ final class EventCursor private (
 
   // this will handle disk cleanup
   def finish(): Unit = ()
+
+  override def toString: String = {
+    def padTo(in: String, length: Int): String = {
+      if (in.length === length)
+        in
+      else
+        (0 until (in.length - length)).map(_ => '0').mkString ++ in
+    }
+
+    val adjustment = if (tagSubShiftLimit > 0) 1 else 0
+    val projectedTags = tagBuffer.take(tagLimit + adjustment).drop(tagOffset)
+
+    if (projectedTags.isEmpty) {
+      s"EventCursor(tagLimit = $tagLimit, tagSubShiftLimit = $tagSubShiftLimit, tagOffset = $tagOffset, tagSubShiftOffset = $tagSubShiftOffset)"
+    } else {
+      val head = projectedTags(0) // >>> tagSubShiftOffset
+      val tail = projectedTags.tail
+
+      val headStr = padTo(head.toHexString.toUpperCase, 16 /*- (tagSubShiftOffset / 4)*/).reverse
+      val tailStr = tail.map(_.toHexString.toUpperCase).map(padTo(_, 16).reverse).mkString
+
+      s"EventCursor(tags = ${headStr + tailStr}, tagLimit = $tagLimit, tagSubShiftLimit = $tagSubShiftLimit, tagOffset = $tagOffset, tagSubShiftOffset = $tagSubShiftOffset)"
+    }
+  }
 }
 
 object EventCursor {
