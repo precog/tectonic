@@ -83,7 +83,8 @@ abstract class BaseParser[F[_], A] {
   @SuppressWarnings(
     Array(
       "org.wartremover.warts.NonUnitStatements",
-      "org.wartremover.warts.Overloading"))
+      "org.wartremover.warts.Overloading",
+      "org.wartremover.warts.Equals"))
   final def absorb(buf: ByteBuffer)(implicit F: Sync[F]): F[Either[ParseException, A]] = F delay {
     done = false
     val buflen = buf.limit() - buf.position()
@@ -91,6 +92,14 @@ abstract class BaseParser[F[_], A] {
     resizeIfNecessary(need)
     buf.get(data, len, buflen)
     len = need
+
+    // ignore BOM
+    if (line == 0 && pos == 0 && offset == 0 && len >= 3) {
+      if (data(0) == 0xef.toByte && data(1) == 0xbb.toByte && data(2) == 0xbf.toByte) {
+        offset = 3
+      }
+    }
+
     churn()
   }
 
