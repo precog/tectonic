@@ -94,6 +94,8 @@ object RowCountHarness {
             count = 0
             back
           }
+
+          def skipped(bytes: Int) = ()
         }
       }
     }
