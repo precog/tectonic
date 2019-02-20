@@ -24,7 +24,7 @@ import org.specs2.mutable.Specification
 import tectonic.test.{Event, ReifiedTerminalPlate}
 import tectonic.test.json._
 
-import scala.{Array, Boolean, Int, List, Nil, Unit, Predef}, Predef._
+import scala.{Array, Boolean, Byte, Int, List, Nil, Unit, Predef}, Predef._
 import scala.collection.mutable
 import scala.util.{Either, Left, Right}
 
@@ -33,6 +33,19 @@ import java.lang.{CharSequence, SuppressWarnings}
 @SuppressWarnings(Array("org.wartremover.warts.Equals"))
 object ParserSpecs extends Specification {
   import Event._
+
+  "utf-8 byte handling" should {
+    "ignore a leading byte-order mark" in {
+      val bytes = Array[Byte](0xef.toByte, 0xbb.toByte, 0xbf.toByte, '{'.toByte, '}'.toByte)
+      bytes must parseRowAs(Map)
+    }
+
+    "fail if a second byte-order mark appears" in {
+      val bytes = Array[Byte](0xef.toByte, 0xbb.toByte, 0xbf.toByte, '{'.toByte, 0xef.toByte, 0xbb.toByte, 0xbf.toByte, '}'.toByte)
+      bytes must failToParseWith(
+        ParseException("expected \" got ￯ (line 1, column 5)", 4, 1, 5))
+    }
+  }
 
   "async line-delimited parsing" should {
     "parse all of the scalars" >> {

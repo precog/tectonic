@@ -33,16 +33,16 @@ package object json {
 
   import MatchersImplicits._
 
-  def parseRowAs(expected: Event*): Matcher[String] =
+  def parseRowAs[A: Absorbable](expected: Event*): Matcher[A] =
     parseAs(expected :+ Event.FinishRow: _*)
 
-  def parseAs(expected: Event*): Matcher[String] =
+  def parseAs[A: Absorbable](expected: Event*): Matcher[A] =
     parseAsWithPlate(expected: _*)(p => p)
 
-  def parseAsWithPlate(expected: Event*)(f: Plate[List[Event]] => Plate[List[Event]]): Matcher[String] = { input: String =>
+  def parseAsWithPlate[A: Absorbable](expected: Event*)(f: Plate[List[Event]] => Plate[List[Event]]): Matcher[A] = { input: A =>
     val resultsF = for {
       parser <- Parser(ReifiedTerminalPlate[IO]().map(f), Parser.ValueStream)
-      left <- parser.absorb(input)
+      left <- Absorbable[A].absorb(parser, input)
       right <- parser.finish
     } yield (left, right)
 
@@ -56,6 +56,26 @@ package object json {
 
       case (_, Left(err)) =>
         (false, s"failed to parse with error '${err.getMessage}' at ${err.line}:${err.col} (i=${err.index})")
+    }
+  }
+
+  def failToParseWith[A: Absorbable](expected: ParseException): Matcher[A] = { input: A =>
+    val resultsF = for {
+      parser <- Parser(ReifiedTerminalPlate[IO](), Parser.ValueStream)
+      left <- Absorbable[A].absorb(parser, input)
+      right <- parser.finish
+    } yield (left, right)
+
+    resultsF.unsafeRunSync() match {
+      case (Right(_), Right(_)) =>
+        (false, s"blergh", s"input parsed successfully (expected failure)")
+
+      case (Left(err), _) =>
+        (err == expected, s"input failed to parse and $err == $expected", s"input failed to parse but $err != $expected")
+
+      case (_, Left(err)) =>
+        (err == expected, s"input failed to parse and $err == $expected", s"input failed to parse but $err != $expected")
+
     }
   }
 }
