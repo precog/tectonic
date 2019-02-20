@@ -26,8 +26,6 @@ import tectonic.json.Parser
 import scala.{List, StringContext}
 import scala.util.{Left, Right}
 
-import java.lang.String
-
 package object json {
   private object MatchersImplicits extends MatchersImplicits
 
