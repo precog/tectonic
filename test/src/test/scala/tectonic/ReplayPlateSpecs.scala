@@ -34,7 +34,7 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
 
   "ReplayPlate" should {
     "round-trip events" in prop { (driver: ∀[λ[α => Plate[α] => Unit]]) =>
-      val plate = ReplayPlate[IO](52428800).unsafeRunSync()
+      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
       driver[Option[EventCursor]](plate)
 
       val streamOpt = plate.finishBatch(true)
@@ -57,7 +57,7 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
     }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors())
 
     "only produce one row at a time" in {
-      val plate = ReplayPlate[IO](52428800).unsafeRunSync()
+      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
       plate.str("first")
       plate.finishRow()
       plate.str("second")
@@ -86,7 +86,7 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
 
     "retain events when subdividing into multiple buffers" in prop { (driver: ∀[λ[α => Plate[α] => Unit]], size0: Int) =>
       (size0 > Int.MinValue) ==> {
-        val plate = ReplayPlate[IO](52428800).unsafeRunSync()
+        val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
         driver[Option[EventCursor]](plate)
 
         val stream = plate.finishBatch(true).get
@@ -127,7 +127,7 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
     }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors())
 
     "mark and rewind at arbitrary points" in {
-      val plate = ReplayPlate[IO](52428800).unsafeRunSync()
+      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
       plate.str("first")
       plate.finishRow()
       plate.str("second")
@@ -182,7 +182,7 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
     }
 
     "correctly grow the buffers" in {
-      val plate = ReplayPlate[IO](52428800).unsafeRunSync()
+      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
 
       (0 until 131072 + 1) foreach { _ =>
         plate.nul()
@@ -223,7 +223,7 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
     }
 
     "produce an error when attempting to grow beyond bounds" in {
-      val plate = ReplayPlate[IO](8200).unsafeRunSync()
+      val plate = ReplayPlate[IO](8200, true).unsafeRunSync()
 
       {
         (0 until 131072 + 1) foreach { _ =>
