@@ -31,7 +31,7 @@ import java.lang.{CharSequence, IllegalStateException, SuppressWarnings, System}
     "org.wartremover.warts.Var",
     "org.wartremover.warts.PublicInference",
     "org.wartremover.warts.FinalVal"))
-final class ReplayPlate private (limit: Int) extends Plate[Option[EventCursor]] {
+final class ReplayPlate private (limit: Int, retainSkips: Boolean) extends Plate[Option[EventCursor]] {
 
   // everything fits into a word
   private[this] final val Nul = EventCursor.Nul
@@ -138,10 +138,13 @@ final class ReplayPlate private (limit: Int) extends Plate[Option[EventCursor]] 
       None
   }
 
-  override final def skipped(bytes: Int): Unit = {
-    appendTag(Skipped)
-    appendInt(bytes)
-  }
+  override final def skipped(bytes: Int): Unit =
+    if (retainSkips) {
+      appendTag(Skipped)
+      appendInt(bytes)
+    } else {
+      ()
+    }
 
   @SuppressWarnings(Array("org.wartremover.warts.Equals"))
   private[this] final def appendTag(tag: Int): Unit = {
@@ -213,6 +216,6 @@ object ReplayPlate {
   // generally it just makes us much more efficient in the singleton cartesian case, and not much less efficient in the massive case
   val DefaultBufferSize: Int = 32
 
-  def apply[F[_]: Sync](limit: Int): F[Plate[Option[EventCursor]]] =
-    Sync[F].delay(new ReplayPlate(limit))
+  def apply[F[_]: Sync](limit: Int, retainSkips: Boolean): F[Plate[Option[EventCursor]]] =
+    Sync[F].delay(new ReplayPlate(limit, retainSkips))
 }
