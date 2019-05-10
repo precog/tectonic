@@ -52,10 +52,10 @@ lazy val test = project
   .settings(name := "tectonic-test")
   .settings(
     libraryDependencies ++= Seq(
-      "org.specs2" %% "specs2-core" % "4.3.4",
+      "org.specs2" %% "specs2-core" % "4.3.6",
       "org.scalacheck" %% "scalacheck" % "1.14.0"),
 
-    libraryDependencies += "org.specs2" %% "specs2-scalacheck" % "4.3.4" % Test)
+    libraryDependencies += "org.specs2" %% "specs2-scalacheck" % "4.3.6" % Test)
   .enablePlugins(AutomateHeaderPlugin)
 
 lazy val benchmarks = project
