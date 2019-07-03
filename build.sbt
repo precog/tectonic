@@ -84,12 +84,12 @@ lazy val benchmarks = project
     Jmh / resourceGenerators += Def.task {
       import scala.sys.process._
 
-
       val targetDir = (Jmh / resourceManaged).value
       val targetFile = targetDir / "worldcitiespop.txt"
 
       if (!targetFile.exists()) {
-        s"curl -o $targetDir/worldcitiespop.txt.gz http://www.maxmind.com/download/worldcities/worldcitiespop.txt.gz".!!
+        // the original source took it offline, so now it's in my dropbox 🤷‍♂️
+        s"curl -L -o $targetDir/worldcitiespop.txt.gz https://www.dropbox.com/s/8tfbn4a7x2tam4n/worldcitiespop.txt.gz?dl=1".!!
         s"gunzip $targetDir/worldcitiespop.txt.gz".!!
       }
 
