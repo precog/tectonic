@@ -181,6 +181,44 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       fourthResults mustEqual List(Event.Str("second"))
     }
 
+
+    "measure distance during rewind" in {
+      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
+
+      plate.str("first")
+      plate.finishRow()
+      plate.str("second")
+      plate.finishRow()
+      plate.num("42", -1, -1)
+      plate.finishRow()
+      plate.nestMap("key")
+      plate.str("third")
+      plate.unnest()
+      plate.finishRow()
+
+      val stream = plate.finishBatch(true).get
+
+      // we're going to ignore this anyway
+      val sink = ReifiedTerminalPlate[IO](false).unsafeRunSync()
+
+      stream.nextRow(sink)   // "first"
+      stream.rewind() mustEqual 2
+
+      stream.nextRow(sink)   // "first"
+      stream.mark()
+      stream.nextRow(sink)   // "second"
+      stream.rewind() mustEqual 2
+
+      stream.nextRow(sink)    // "second"
+      stream.nextRow(sink)    // 42
+      stream.mark()
+      stream.nextRow(sink)    // { "key": "third" }
+      stream.rewind() mustEqual 4
+
+      stream.nextRow(sink)    // { "key": "third" }
+      stream.rewind() mustEqual 4
+    }
+
     "correctly grow the buffers" in {
       val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
 
