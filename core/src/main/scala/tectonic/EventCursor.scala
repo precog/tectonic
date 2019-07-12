@@ -255,13 +255,19 @@ final class EventCursor private (
 
   /**
    * Rewinds the cursor location to the last mark. If no mark has been set,
-   * it resets to the beginning of the stream.
+   * it resets to the beginning of the stream. Returns the number of events
+   * rewound.
    */
-  def rewind(): Unit = {
+  def rewind(): Int = {
+    val tagCursorDistance = tagCursor - tagCursorMark
+    val tagSubShiftDistance = tagSubShiftCursor - tagSubShiftCursorMark
+
     tagCursor = tagCursorMark
     tagSubShiftCursor = tagSubShiftCursorMark
     strsCursor = strsCursorMark
     intsCursor = intsCursorMark
+
+    (tagCursorDistance * (64 / 4) + (tagSubShiftDistance / 4))
   }
 
   @SuppressWarnings(
