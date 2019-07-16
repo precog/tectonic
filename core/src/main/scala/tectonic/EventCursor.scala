@@ -201,9 +201,9 @@ final class EventCursor private (
           val results = if (upperTagTargetIndex <= tagLimit) {
             if (lowerTagTargetIndex > tagFrom) {
               if (cheatUp)
-                attemptTarget(upperTagTargetIndex, 0)
+                attemptTarget(upperTagTargetIndex, 0).orElse(attemptTarget(lowerTagTargetIndex, 0))
               else
-                attemptTarget(lowerTagTargetIndex, 0)
+                attemptTarget(lowerTagTargetIndex, 0).orElse(attemptTarget(upperTagTargetIndex, 0))
             } else {
               attemptTarget(upperTagTargetIndex, 0)
             }
