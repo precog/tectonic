@@ -106,6 +106,13 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
             lengths.sum mustEqual stream.length
             lengths must contain(be_>=((size / 16) * 16))
 
+            partitions must contain({ (ec: EventCursor) =>
+              val plate = ReifiedTerminalPlate[IO](false).unsafeRunSync()
+              ec.drive(plate)
+              ec.reset()
+              plate.finishBatch(true).last mustEqual Event.FinishRow
+            }).forall
+
             val origEff =
               ReifiedTerminalPlate[IO](false) flatMap { plate =>
                 IO(stream.drive(plate)) >> IO(plate.finishBatch(true))
@@ -125,6 +132,42 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
         }
       }
     }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors())
+
+    /*
+      1. Find a boundary in the long *above* the ideal (to set cheatUp = false)
+      2. Fail to find at ideal long (to increment right and left)
+      3. Fail to find below (to increment right and left *again*)
+      4. Still be able to look below! Fail to find below. Fall off right
+      5. Fall off left
+
+
+      Six blocks, ideal fall into fourth block
+
+      Ideal has to be ~56
+
+      Five leading blocks
+      First finish row is at index 65
+      Fifth block overlaps with set of six blocks
+      Five more blocks
+      Ten blocks total
+      160 elements
+     */
+    "subdivide a cursor without a finish row" in {
+      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
+
+      (0 until (16 * 10 - 1)).foreach { i =>
+        if (i == 80) {
+          plate.finishRow()
+        }
+
+        plate.str(i.toString)
+      }
+
+      val ec = plate.finishBatch(true).get
+      val partitions = ec.subdivide(56)
+
+      partitions must haveSize(2)
+    }
 
     "mark and rewind at arbitrary points" in {
       val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()

@@ -135,11 +135,17 @@ final class EventCursor private (
 
     @SuppressWarnings(Array("org.wartremover.warts.Recursion"))
     def pushNext(tagFrom: Int, tagFromSubShift: Int, strsFrom: Int, intsFrom: Int, cheatUp: Boolean): Unit = {
+      println(s"tagFrom = $tagFrom")
+      println(s"tagFromSubShift = $tagFromSubShift")
+      println(s"cheatUp = $cheatUp")
+
       if (tagFrom < tagLimit || tagFromSubShift < tagSubShiftLimit) {
         val semanticTargetIndex =
           math.min((tagFrom * (64 / 4)) + (tagFromSubShift / 4) + bound, semanticMax)
 
         val idealTagTargetIndex = semanticTargetIndex / (64 / 4)
+
+        println(s"idealTagTargetIndex = $idealTagTargetIndex")
 
         def attemptTarget(tagTargetIndex: Int, offsetBound: Int) = {
           val targetRowOffset = if (tagTargetIndex == tagLimit)
@@ -169,17 +175,17 @@ final class EventCursor private (
             val intsLimit2 = intsOffset2 + intsCount
 
             back += new EventCursor(
-              tagBuffer,
-              tagOffset2,
-              tagSubShiftOffset2,
-              tagLimit2,
-              tagSubShiftLimit2,
-              strsBuffer,
-              strsOffset2,
-              strsLimit2,
-              intsBuffer,
-              intsOffset2,
-              intsLimit2)
+              tagBuffer = tagBuffer,
+              tagOffset = tagOffset2,
+              tagSubShiftOffset = tagSubShiftOffset2,
+              tagLimit = tagLimit2,
+              tagSubShiftLimit = tagSubShiftLimit2,
+              strsBuffer = strsBuffer,
+              strsOffset = strsOffset2,
+              strsLimit = strsLimit2,
+              intsBuffer = intsBuffer,
+              intsOffset = intsOffset2,
+              intsLimit = intsLimit2)
 
             Some((tagLimit2, tagSubShiftLimit2, strsLimit2, intsLimit2))
           } else {
@@ -373,17 +379,17 @@ final class EventCursor private (
 
   def copy(): EventCursor = {
     new EventCursor(
-      tagBuffer,
-      tagOffset,
-      tagSubShiftOffset,
-      tagLimit,
-      tagSubShiftLimit,
-      strsBuffer,
-      strsOffset,
-      strsLimit,
-      intsBuffer,
-      intsOffset,
-      intsLimit)
+      tagBuffer = tagBuffer,
+      tagOffset = tagOffset,
+      tagSubShiftOffset = tagSubShiftOffset,
+      tagLimit = tagLimit,
+      tagSubShiftLimit = tagSubShiftLimit,
+      strsBuffer = strsBuffer,
+      strsOffset = strsOffset,
+      strsLimit = strsLimit,
+      intsBuffer = intsBuffer,
+      intsOffset = intsOffset,
+      intsLimit = intsLimit)
   }
 
   // this will handle disk cleanup
@@ -439,15 +445,15 @@ object EventCursor {
       intsLimit: Int)
       : EventCursor =
     new EventCursor(
-      tagBuffer,
-      0,
-      0,
-      tagLimit,
-      tagSubShiftLimit,
-      strsBuffer,
-      0,
-      strsLimit,
-      intsBuffer,
-      0,
-      intsLimit)
+      tagBuffer = tagBuffer,
+      tagOffset = 0,
+      tagSubShiftOffset = 0,
+      tagLimit = tagLimit,
+      tagSubShiftLimit = tagSubShiftLimit,
+      strsBuffer = strsBuffer,
+      strsOffset = 0,
+      strsLimit = strsLimit,
+      intsBuffer = intsBuffer,
+      intsOffset = 0,
+      intsLimit = intsLimit)
 }
