@@ -135,17 +135,11 @@ final class EventCursor private (
 
     @SuppressWarnings(Array("org.wartremover.warts.Recursion"))
     def pushNext(tagFrom: Int, tagFromSubShift: Int, strsFrom: Int, intsFrom: Int, cheatUp: Boolean): Unit = {
-      println(s"tagFrom = $tagFrom")
-      println(s"tagFromSubShift = $tagFromSubShift")
-      println(s"cheatUp = $cheatUp")
-
       if (tagFrom < tagLimit || tagFromSubShift < tagSubShiftLimit) {
         val semanticTargetIndex =
           math.min((tagFrom * (64 / 4)) + (tagFromSubShift / 4) + bound, semanticMax)
 
         val idealTagTargetIndex = semanticTargetIndex / (64 / 4)
-
-        println(s"idealTagTargetIndex = $idealTagTargetIndex")
 
         def attemptTarget(tagTargetIndex: Int, offsetBound: Int) = {
           val targetRowOffset = if (tagTargetIndex == tagLimit)
