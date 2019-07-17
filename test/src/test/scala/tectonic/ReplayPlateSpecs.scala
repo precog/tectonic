@@ -152,7 +152,7 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       Ten blocks total
       160 elements
      */
-    "subdivide a cursor without a finish row" in {
+    "subdivide a cursor when cheating down in the mutual case rollover" in {
       val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
 
       (0 until (16 * 10 - 1)).foreach { i =>
