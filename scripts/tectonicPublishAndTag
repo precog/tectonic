@@ -14,4 +14,4 @@ export -f bumpInDownstream
 scripts/bumpDependentProject slamdata quasar bumpInDownstream
 scripts/bumpDependentProject slamdata qdata bumpInDownstream
 scripts/bumpDependentProject slamdata mimir bumpInDownstream
-scripts/bumpDependentProject slamdata quasar-schema bumpInDownstream
+scripts/bumpDependentProject slamdata scion bumpInDownstream
