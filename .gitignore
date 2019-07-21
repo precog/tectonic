@@ -1,5 +1,8 @@
 target/
 .targets/
+tags
+*.swp
+*.swo
 
 # sbt-slamdata common resources
 /scripts/bumpDependentProject
