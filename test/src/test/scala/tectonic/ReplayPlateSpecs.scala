@@ -131,6 +131,7 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
           }
         }
       }
+      pending   // TODO this test is flaky; tracked by ch8296
     }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors())
 
     /*
