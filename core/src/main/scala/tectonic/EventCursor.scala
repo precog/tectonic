@@ -53,14 +53,20 @@ final class EventCursor private (
   private[this] final var strsCursorMark: Int = strsOffset
   private[this] final var intsCursorMark: Int = intsOffset
 
+  private[this] final val NextRow = EventCursor.NextRowStatus.NextRow
+  private[this] final val NextBatch = EventCursor.NextRowStatus.NextBatch
+  private[this] final val NextRowAndBatch = EventCursor.NextRowStatus.NextRowAndBatch
+  private[this] final val AllDoneNoRow = EventCursor.NextRowStatus.AllDoneNoRow
+  private[this] final val AllDoneWithRow = EventCursor.NextRowStatus.AllDoneWithRow
+
   @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.While"))
   def drive(plate: Plate[_]): Unit = {
     if (tagLimit > 0 || tagSubShiftLimit > 0) {
-      var b: Byte = 0
-      while (b == 0) {
+      var b: EventCursor.NextRowStatus = NextRow
+      while (b eq NextRow) {
         b = nextRow(plate)
 
-        if (b != 1) {
+        if (b ne NextBatch) {
           plate.finishRow()
         }
       }
@@ -68,11 +74,11 @@ final class EventCursor private (
   }
 
   /**
-   * Returns:
+   * Originally returned: (TODO remove this documentation)
    *
-   * - `0` if a row has ended but there is still more data
-   * - `1` if the data stream has terminated without ending the row
-   * - `2` if the data stream has terminated *and* the row has ended
+   * - `0` ==> NextRow
+   * - `1` ==> NextBatch
+   * - `2` ==> NextRowAndBatch
    */
   // TODO skips
   @SuppressWarnings(
@@ -80,7 +86,7 @@ final class EventCursor private (
       "org.wartremover.warts.Equals",
       "org.wartremover.warts.While",
       "org.wartremover.warts.Throw"))
-  def nextRow(plate: Plate[_]): Byte = {
+  def nextRow(plate: Plate[_]): EventCursor.NextRowStatus = {
     var continue = true
     var hasNext = !(tagCursor == tagLimit && tagSubShiftCursor == tagSubShiftLimit)
     while (continue && hasNext) {
@@ -106,11 +112,11 @@ final class EventCursor private (
     }
 
     if (!continue && hasNext)
-      0
+      NextRow
     else if (continue && !hasNext)
-      1
+      NextBatch
     else if (!continue && !hasNext)
-      2
+      NextRowAndBatch
     else
       throw new AssertionError
   }
@@ -450,4 +456,14 @@ object EventCursor {
       intsBuffer = intsBuffer,
       intsOffset = 0,
       intsLimit = intsLimit)
+
+  sealed trait NextRowStatus extends Product with Serializable
+
+  object NextRowStatus {
+    case object NextRow extends NextRowStatus
+    case object NextBatch extends NextRowStatus
+    case object NextRowAndBatch extends NextRowStatus
+    case object AllDoneNoRow extends NextRowStatus
+    case object AllDoneWithRow extends NextRowStatus
+  }
 }
