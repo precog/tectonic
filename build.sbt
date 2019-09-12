@@ -73,7 +73,7 @@ lazy val benchmarks = project
       "co.fs2" %% "fs2-core" % Fs2Version,
       "co.fs2" %% "fs2-io"   % Fs2Version,
 
-      "org.http4s" %% "jawn-fs2" % "0.14.2"))
+      "org.http4s" %% "jawn-fs2" % "0.15.0"))
   .settings(    // magic rewiring so sbt-jmh works sanely
     Jmh / sourceDirectory := (Compile / sourceDirectory).value,
     Jmh / classDirectory := (Compile / classDirectory).value,
