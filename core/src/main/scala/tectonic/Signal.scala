@@ -25,4 +25,12 @@ object Signal {
   case object SkipColumn extends Signal
   case object Continue extends Signal
   case object Terminate extends Signal
+
+  def and(s1: Signal, s2: Signal): Signal =
+    (s1, s2) match {
+      case (SkipColumn, SkipColumn) | (SkipColumn, SkipRow) | (SkipRow, SkipColumn) => SkipColumn
+      case (SkipRow, SkipRow) => SkipRow
+      case (Terminate, Terminate) => Terminate
+      case (_, _) => Continue
+    }
 }
