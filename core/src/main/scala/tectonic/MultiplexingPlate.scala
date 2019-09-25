@@ -16,8 +16,6 @@
 
 package tectonic
 
-import cats.effect.Sync
-
 import scala._
 
 import java.lang.CharSequence
@@ -25,44 +23,46 @@ import java.lang.CharSequence
 final class MultiplexingPlate[A] private (main: Plate[A], side: Plate[Unit])
     extends Plate[A] {
 
+  private[this] val sig = Signal
+
   def arr(): Signal =
-    Signal.and(side.arr(), main.arr())
+    sig.and(side.arr(), main.arr())
 
   def map(): Signal =
-    Signal.and(side.map(), main.map())
+    sig.and(side.map(), main.map())
 
   def fls(): Signal =
-    Signal.and(side.fls(), main.fls())
+    sig.and(side.fls(), main.fls())
 
   def tru(): Signal =
-    Signal.and(side.tru(), main.tru())
+    sig.and(side.tru(), main.tru())
 
   def nul(): Signal =
-    Signal.and(side.nul(), main.nul())
+    sig.and(side.nul(), main.nul())
 
   def num(s: CharSequence, decIdx: Int, expIdx: Int): Signal =
-    Signal.and(
+    sig.and(
       side.num(s, decIdx, expIdx),
       main.num(s, decIdx, expIdx))
 
   def str(s: CharSequence): Signal =
-    Signal.and(side.str(s), main.str(s))
+    sig.and(side.str(s), main.str(s))
 
   def nestArr(): Signal =
-    Signal.and(side.nestArr(), main.nestArr())
+    sig.and(side.nestArr(), main.nestArr())
 
   def nestMap(pathComponent: CharSequence): Signal =
-    Signal.and(
+    sig.and(
       side.nestMap(pathComponent),
       main.nestMap(pathComponent))
 
   def nestMeta(pathComponent: CharSequence): Signal =
-    Signal.and(
+    sig.and(
       side.nestMeta(pathComponent),
       main.nestMeta(pathComponent))
 
   def unnest(): Signal =
-    Signal.and(side.unnest(), main.unnest())
+    sig.and(side.unnest(), main.unnest())
 
   def skipped(bytes: Int): Unit = {
     side.skipped(bytes)
@@ -83,7 +83,6 @@ final class MultiplexingPlate[A] private (main: Plate[A], side: Plate[Unit])
 }
 
 object MultiplexingPlate {
-  def apply[F[_]: Sync, A](main: Plate[A], side: Plate[Unit])
-      : F[Plate[A]] =
-    Sync[F].delay(new MultiplexingPlate(main, side))
+  def apply[A](main: Plate[A], side: Plate[Unit]): Plate[A] =
+    new MultiplexingPlate(main, side)
 }

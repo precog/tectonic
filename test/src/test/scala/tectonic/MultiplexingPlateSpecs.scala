@@ -30,7 +30,7 @@ object MultiplexingPlateSpecs extends Specification {
         val mutant = MutantPlate[IO]().unsafeRunSync()
         val reified = ReifiedTerminalPlate[IO](true).unsafeRunSync()
 
-        val plate = MultiplexingPlate[IO, List[Event]](reified, mutant).unsafeRunSync()
+        val plate = MultiplexingPlate[List[Event]](reified, mutant)
 
         plate.arr()
         mutant.mutant mustEqual "arr"
@@ -41,7 +41,7 @@ object MultiplexingPlateSpecs extends Specification {
         val mutant = MutantPlate[IO]().unsafeRunSync()
         val reified = ReifiedTerminalPlate[IO](true).unsafeRunSync()
 
-        val plate = MultiplexingPlate[IO, List[Event]](reified, mutant).unsafeRunSync()
+        val plate = MultiplexingPlate[List[Event]](reified, mutant)
 
         plate.map()
         mutant.mutant mustEqual "map"
@@ -52,7 +52,7 @@ object MultiplexingPlateSpecs extends Specification {
         val mutant = MutantPlate[IO]().unsafeRunSync()
         val reified = ReifiedTerminalPlate[IO](true).unsafeRunSync()
 
-        val plate = MultiplexingPlate[IO, List[Event]](reified, mutant).unsafeRunSync()
+        val plate = MultiplexingPlate[List[Event]](reified, mutant)
 
         plate.fls()
         mutant.mutant mustEqual "fls"
@@ -63,7 +63,7 @@ object MultiplexingPlateSpecs extends Specification {
         val mutant = MutantPlate[IO]().unsafeRunSync()
         val reified = ReifiedTerminalPlate[IO](true).unsafeRunSync()
 
-        val plate = MultiplexingPlate[IO, List[Event]](reified, mutant).unsafeRunSync()
+        val plate = MultiplexingPlate[List[Event]](reified, mutant)
 
         plate.tru()
         mutant.mutant mustEqual "tru"
@@ -74,7 +74,7 @@ object MultiplexingPlateSpecs extends Specification {
         val mutant = MutantPlate[IO]().unsafeRunSync()
         val reified = ReifiedTerminalPlate[IO](true).unsafeRunSync()
 
-        val plate = MultiplexingPlate[IO, List[Event]](reified, mutant).unsafeRunSync()
+        val plate = MultiplexingPlate[List[Event]](reified, mutant)
 
         plate.nul()
         mutant.mutant mustEqual "nul"
@@ -85,7 +85,7 @@ object MultiplexingPlateSpecs extends Specification {
         val mutant = MutantPlate[IO]().unsafeRunSync()
         val reified = ReifiedTerminalPlate[IO](true).unsafeRunSync()
 
-        val plate = MultiplexingPlate[IO, List[Event]](reified, mutant).unsafeRunSync()
+        val plate = MultiplexingPlate[List[Event]](reified, mutant)
 
         plate.num("42", 0, 0)
         mutant.mutant mustEqual "num42"
@@ -96,7 +96,7 @@ object MultiplexingPlateSpecs extends Specification {
         val mutant = MutantPlate[IO]().unsafeRunSync()
         val reified = ReifiedTerminalPlate[IO](true).unsafeRunSync()
 
-        val plate = MultiplexingPlate[IO, List[Event]](reified, mutant).unsafeRunSync()
+        val plate = MultiplexingPlate[List[Event]](reified, mutant)
 
         plate.str("foo")
         mutant.mutant mustEqual "strfoo"
@@ -107,7 +107,7 @@ object MultiplexingPlateSpecs extends Specification {
         val mutant = MutantPlate[IO]().unsafeRunSync()
         val reified = ReifiedTerminalPlate[IO](true).unsafeRunSync()
 
-        val plate = MultiplexingPlate[IO, List[Event]](reified, mutant).unsafeRunSync()
+        val plate = MultiplexingPlate[List[Event]](reified, mutant)
 
         plate.nestArr()
         mutant.mutant mustEqual "nestArr"
@@ -118,7 +118,7 @@ object MultiplexingPlateSpecs extends Specification {
         val mutant = MutantPlate[IO]().unsafeRunSync()
         val reified = ReifiedTerminalPlate[IO](true).unsafeRunSync()
 
-        val plate = MultiplexingPlate[IO, List[Event]](reified, mutant).unsafeRunSync()
+        val plate = MultiplexingPlate[List[Event]](reified, mutant)
 
         plate.nestMap("foo")
         mutant.mutant mustEqual "nestMapfoo"
@@ -129,7 +129,7 @@ object MultiplexingPlateSpecs extends Specification {
         val mutant = MutantPlate[IO]().unsafeRunSync()
         val reified = ReifiedTerminalPlate[IO](true).unsafeRunSync()
 
-        val plate = MultiplexingPlate[IO, List[Event]](reified, mutant).unsafeRunSync()
+        val plate = MultiplexingPlate[List[Event]](reified, mutant)
 
         plate.nestMeta("foo")
         mutant.mutant mustEqual "nestMetafoo"
@@ -140,7 +140,7 @@ object MultiplexingPlateSpecs extends Specification {
         val mutant = MutantPlate[IO]().unsafeRunSync()
         val reified = ReifiedTerminalPlate[IO](true).unsafeRunSync()
 
-        val plate = MultiplexingPlate[IO, List[Event]](reified, mutant).unsafeRunSync()
+        val plate = MultiplexingPlate[List[Event]](reified, mutant)
 
         plate.unnest
         mutant.mutant mustEqual "unnest"
@@ -151,7 +151,7 @@ object MultiplexingPlateSpecs extends Specification {
         val mutant = MutantPlate[IO]().unsafeRunSync()
         val reified = ReifiedTerminalPlate[IO](true).unsafeRunSync()
 
-        val plate = MultiplexingPlate[IO, List[Event]](reified, mutant).unsafeRunSync()
+        val plate = MultiplexingPlate[List[Event]](reified, mutant)
 
         plate.skipped(12)
         mutant.mutant mustEqual "skipped12"
@@ -162,7 +162,7 @@ object MultiplexingPlateSpecs extends Specification {
         val mutant = MutantPlate[IO]().unsafeRunSync()
         val reified = ReifiedTerminalPlate[IO](true).unsafeRunSync()
 
-        val plate = MultiplexingPlate[IO, List[Event]](reified, mutant).unsafeRunSync()
+        val plate = MultiplexingPlate[List[Event]](reified, mutant)
 
         plate.finishBatch(true) mustEqual List()
         mutant.mutant mustEqual "finishBatchtrue"
@@ -172,7 +172,7 @@ object MultiplexingPlateSpecs extends Specification {
         val mutant = MutantPlate[IO]().unsafeRunSync()
         val reified = ReifiedTerminalPlate[IO](true).unsafeRunSync()
 
-        val plate = MultiplexingPlate[IO, List[Event]](reified, mutant).unsafeRunSync()
+        val plate = MultiplexingPlate[List[Event]](reified, mutant)
 
         plate.finishRow()
         mutant.mutant mustEqual "finishRow"
