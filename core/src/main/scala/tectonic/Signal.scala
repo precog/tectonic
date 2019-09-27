@@ -16,13 +16,28 @@
 
 package tectonic
 
-import scala.{Product, Serializable}
+import scala.Int
 
-sealed trait Signal extends Product with Serializable
+sealed class Signal(final val ordinal: Int)
 
 object Signal {
-  case object SkipRow extends Signal
-  case object SkipColumn extends Signal
-  case object Continue extends Signal
-  case object Terminate extends Signal
+  case object Continue extends Signal(1)
+  case object SkipColumn extends Signal(2)
+  case object SkipRow extends Signal(-2)
+  case object Terminate extends Signal(3)
+
+  private val _Continue = Continue
+  private val _SkipColumn = SkipColumn
+
+  def and(s1: Signal, s2: Signal): Signal = {
+    val s1o: Int = s1.ordinal
+    val s2o: Int = s2.ordinal
+
+    if (s1o == s2o)
+      s1
+    else if ((s1o + s2o) == 0)
+      _SkipColumn
+    else
+      _Continue
+  }
 }

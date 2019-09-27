@@ -19,7 +19,6 @@ package tectonic
 import cats.effect.Sync
 
 import scala.{Array, Boolean, Int, Long, None, Option, Some, StringContext, Unit}
-// import scala.{Predef}, Predef._
 
 import java.lang.{CharSequence, IllegalStateException, SuppressWarnings, System}
 
