@@ -52,8 +52,8 @@ lazy val test = project
   .settings(name := "tectonic-test")
   .settings(
     libraryDependencies ++= Seq(
-      "org.specs2" %% "specs2-core" % "4.7.1",
-      "org.scalacheck" %% "scalacheck" % "1.14.0"),
+      "org.specs2" %% "specs2-core" % "4.7.0",
+      "org.scalacheck" %% "scalacheck" % "1.14.2"),
 
     libraryDependencies += "org.specs2" %% "specs2-scalacheck" % "4.7.1" % Test)
   .enablePlugins(AutomateHeaderPlugin)

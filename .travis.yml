@@ -1,5 +1,5 @@
 language: scala
-scala: 2.12.6
+scala: 2.12.10
 jdk: openjdk8
 
 stages:
@@ -56,7 +56,3 @@ branches:
   only:
     - master
     - /^backport.*$/
-
-before_cache:
-  - find "$HOME/.sbt/" -name '*.lock' -print0 | xargs -0 rm
-  - find "$HOME/.ivy2/" -name 'ivydata-*.properties' -print0 | xargs -0 rm
