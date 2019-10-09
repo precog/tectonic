@@ -20,7 +20,7 @@ import scala._
 
 import java.lang.CharSequence
 
-final class MultiplexingPlate[A] private (main: Plate[A], side: Plate[Unit])
+class MultiplexingPlate[A] private (main: Plate[A], side: Plate[Unit])
     extends Plate[A] {
 
   private[this] val sig = Signal
