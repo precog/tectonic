@@ -5,8 +5,7 @@ IFS=$'\n\t'       # http://redsymbol.net/articles/unofficial-bash-strict-mode/
 
 "$SBT" transferPublishAndTagResources
 
-# Set TRAVIS_JOB_NUMBER as a workaround to meet sbt-slamdata's publishAndTag assumption
-TRAVIS_JOB_NUMBER=1 scripts/publishAndTag 'slamdata/tectonic'
+scripts/publishAndTag 'slamdata/tectonic'
 
 bumpInDownstream() { echo $1 > tectonic-version; }
 export -f bumpInDownstream
