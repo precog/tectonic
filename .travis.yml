@@ -45,10 +45,14 @@ script: $SBT ++$TRAVIS_SCALA_VERSION test
 
 after_success:
   - |-
-    if [[ "$TRAVIS_PULL_REQUEST" == "false" ]] && [[ "$TRAVIS_BRANCH" =~ backport/v.*|master ]]; then
-      scripts/tectonicPublishAndTag
+    if [[ "$TRAVIS_JDK" =~ adopt ]]; then
+      if [[ "$TRAVIS_PULL_REQUEST" == "false" ]] && [[ "$TRAVIS_BRANCH" =~ backport/v.*|master ]]; then
+        scripts/tectonicPublishAndTag
+      fi
+
+      scripts/checkAndAutoMerge
     fi
-  - scripts/checkAndAutoMerge
+
   - scripts/discordTravisPost success https://discordapp.com/api/webhooks/$DISCORD_WEBHOOK_TOKENS
 
 after_failure:
