@@ -1,11 +1,5 @@
 language: scala
 scala: 2.12.10
-jdk: openjdk8
-
-stages:
-  - name: test
-  - name: publish
-    if: NOT type = pull_request
 
 cache:
   directories:
@@ -14,8 +8,14 @@ cache:
     - $HOME/.coursier/cache
     - '.hoarder-cache'
 
+matrix:
+  include:
+    - env: [TRAVIS_JDK=adopt@1.8.0-222]
+    - env: [TRAVIS_JDK=graalvm@19.2.0]
+
 env:
   global:
+    - JABBA_HOME=/home/travis/.jabba
     - COURSIER_PROGRESS=0
     - SBT=./sbt
     # ENCRYPTION_PASSWORD
@@ -27,25 +27,27 @@ env:
     # DISCORD_WEBHOOK_TOKENS
     - secure: "tbFxh0tH7iwPDWcPa/sDcnR2aQB/zNDZc+BPYVunqZzk4uTlYhkvVA8K9ELk6gSh5RHtoijs+PSe40T467zXO19vpFgLpSnLOvbHsFrwcWMbAoOnjruqC7qTONM1QusNqrRXyDYdkUKqRU0g8Sfu2ERvjaRI/AsET2+HT02vxhiT72aL8sN0l3y+/7GZNxMzwtYRpnQIkzyHyYgDrjWY4keXFDiNBPXosCb+wm9oQVGufwaF1I2FWSBK4Vx+QHRzi9/cY1CaeqcKxnjDV7rgHoHDn3yL1czbBwHICVi7FTi71DK5jzU7/o0D48a2ShulnWz9RQPCxv5Qx3nu/6tEtaBguiclr7/mT/EZW/0w2JF17cYs7UgK1emOkBi98Q7NZNxqZ9gh8EpEaPy5ZygfQeDmqoBFEj/7xB2/dkm0/+lUunQ8KkRhCk5OI1IeUwFkam+7IYLPn++64XlRYhhT+HGbMinQIuS2dtcGYtCzBriWnK3/2mSrKUw0Fh1Z5I92F5OEEjQZab85SRgYYmSuZe1WKbkUWLNBldXOpzFX3xN+lKMCFkRVOyQHeZhvRUC4GDwExwdSrLDkUr85EfP/1zszV7k/3CmV45+wyhXe/VMLn6DH0EznQ0YJVUTJAtKxR6oUF3lBT/XUjldOSt+19AWxFs0qWvzXeNuO7HYMVzk="
 
+before_install: curl -sL https://raw.githubusercontent.com/shyiko/jabba/0.11.2/install.sh | bash && . ~/.jabba/jabba.sh
+
 install:
+  - set -e
+  - $JABBA_HOME/bin/jabba install $TRAVIS_JDK
+  - unset _JAVA_OPTIONS
+  - export _JAVA_OPTIONS='-Dsbt.log.noformat=false'
+  - export JAVA_HOME="$JABBA_HOME/jdk/$TRAVIS_JDK"
+  - export PATH="$JAVA_HOME/bin:$PATH"
+  - java -version
+
   - $SBT transferCommonResources
   - scripts/commonSetup
 
-jobs:
-  include:
-    - stage: test
-      script:
-        - set -e
-        - $SBT ++$TRAVIS_SCALA_VERSION test
-
-    - stage: publish
-      env:
-      script: scripts/tectonicPublishAndTag
-
-      git:
-        depth: false
+script: $SBT ++$TRAVIS_SCALA_VERSION test
 
 after_success:
+  - |-
+    if [[ "$TRAVIS_PULL_REQUEST" == "false" ]] && [[ "$TRAVIS_BRANCH" =~ backport/v.*|master ]]; then
+      scripts/tectonicPublishAndTag
+    fi
   - scripts/checkAndAutoMerge
   - scripts/discordTravisPost success https://discordapp.com/api/webhooks/$DISCORD_WEBHOOK_TOKENS
 
