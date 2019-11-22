@@ -46,6 +46,7 @@ final class ReplayPlate private (limit: Int, retainSkips: Boolean) extends Plate
   private[this] final val Unnest = EventCursor.Unnest
   private[this] final val FinishRow = EventCursor.FinishRow
   private[this] final val Skipped = EventCursor.Skipped
+  private[this] final val EndBatch = EventCursor.EndBatch
 
   private[this] final val Continue = Signal.Continue
 

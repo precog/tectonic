@@ -18,16 +18,13 @@ package tectonic
 package test
 
 import cats.effect.IO
-import cats.instances.list._
-import cats.syntax.flatMap._
-import cats.syntax.traverse._
 
 import org.specs2.ScalaCheck
 import org.specs2.mutable._
 
-import scala.{math, Boolean, Int, List, Option, Predef, Unit}, Predef._
+import scala.{Boolean, Int, List, Option, Predef, Unit}, Predef._
 
-import java.lang.{CharSequence, IllegalArgumentException, IllegalStateException, Runtime}
+import java.lang.{CharSequence, IllegalStateException, Runtime}
 
 object ReplayPlateSpecs extends Specification with ScalaCheck {
   import Generators._
@@ -79,95 +76,9 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       val (firstResults, row1, secondResults, row2) = eff.unsafeRunSync()
 
       firstResults mustEqual List(Event.Str("first"))
-      row1 mustEqual 0
+      row1 mustEqual EventCursor.NextRowStatus.NextRow
       secondResults mustEqual List(Event.Str("second"))
-      row2 mustEqual 2
-    }
-
-    "retain events when subdividing into multiple buffers" in prop { (driver: ∀[λ[α => Plate[α] => Unit]], size0: Int) =>
-      (size0 > Int.MinValue) ==> {
-        val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
-        driver[Option[EventCursor]](plate)
-
-        val stream = plate.finishBatch(true).get
-
-        (stream.length > 0) ==> {
-          val size = math.abs(size0) % stream.length
-
-          if (size == 0) {
-            stream.subdivide(size) must throwAn[IllegalArgumentException]
-          } else {
-            val partitions = stream.subdivide(size)
-
-            partitions must haveSize(be_>=(1))
-            partitions.map(countRows).sum mustEqual countRows(stream)
-
-            val lengths = partitions.map(_.length)
-            lengths.sum mustEqual stream.length
-            lengths must contain(be_>=((size / 16) * 16))
-
-            partitions must contain({ (ec: EventCursor) =>
-              val plate = ReifiedTerminalPlate[IO](false).unsafeRunSync()
-              ec.drive(plate)
-              ec.reset()
-              plate.finishBatch(true).last mustEqual Event.FinishRow
-            }).forall
-
-            val origEff =
-              ReifiedTerminalPlate[IO](false) flatMap { plate =>
-                IO(stream.drive(plate)) >> IO(plate.finishBatch(true))
-              }
-
-            val partEff = partitions traverse { substream =>
-              ReifiedTerminalPlate[IO](false) flatMap { plate =>
-                IO(substream.drive(plate)) >> IO(plate.finishBatch(true))
-              }
-            }
-
-            val originalResults = origEff.unsafeRunSync()
-            val partitionResults = partEff.unsafeRunSync().flatten
-
-            originalResults mustEqual partitionResults
-          }
-        }
-      }
-      pending   // TODO this test is flaky; tracked by ch8296
-    }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors())
-
-    /*
-      1. Find a boundary in the long *above* the ideal (to set cheatUp = false)
-      2. Fail to find at ideal long (to increment right and left)
-      3. Fail to find below (to increment right and left *again*)
-      4. Still be able to look below! Fail to find below. Fall off right
-      5. Fall off left
-
-
-      Six blocks, ideal fall into fourth block
-
-      Ideal has to be ~56
-
-      Five leading blocks
-      First finish row is at index 65
-      Fifth block overlaps with set of six blocks
-      Five more blocks
-      Ten blocks total
-      160 elements
-     */
-    "subdivide a cursor when cheating down in the mutual case rollover" in {
-      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
-
-      (0 until (16 * 10 - 1)).foreach { i =>
-        if (i == 80) {
-          plate.finishRow()
-        }
-
-        plate.str(i.toString)
-      }
-
-      val ec = plate.finishBatch(true).get
-      val partitions = ec.subdivide(56)
-
-      partitions must haveSize(2)
+      row2 mustEqual EventCursor.NextRowStatus.NextRowAndBatch
     }
 
     "mark and rewind at arbitrary points" in {
@@ -318,7 +229,7 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
   def countRows(ec: EventCursor): Int = {
     var count = if (ec.length > 0) 1 else 0
 
-    while (ec.nextRow(NullPlate) == 0) {
+    while (ec.nextRow(NullPlate) == EventCursor.NextRowStatus.NextRow) {
       count += 1
     }
 
