@@ -117,22 +117,25 @@ final class EventCursor private (
       throw new AssertionError
   }
 
-  // returns true if we successfully advanced to a new batch; false if we're at EOF or not at a batch boundary
+  // returns true if the batch is non-empty, false otherwise
   def nextBatch(): Boolean = {
-    if (hasNext() && currentTag() == 0xD) {
-      val _ = nextTag()   // advance the cursors
+    if (hasNext()) {
+      if (currentTag() != 0xD) {
+        tagCursorBatchStart = tagCursor
+        tagSubShiftCursorBatchStart = tagSubShiftCursor
+        strsCursorBatchStart = strsCursor
+        intsCursorBatchStart = intsCursor
 
-      tagCursorBatchStart = tagCursor
-      tagSubShiftCursorBatchStart = tagSubShiftCursor
-      strsCursorBatchStart = strsCursor
-      intsCursorBatchStart = intsCursor
+        tagCursorMark = tagCursorBatchStart
+        tagSubShiftCursorMark = tagSubShiftCursorBatchStart
+        strsCursorMark = strsCursorBatchStart
+        intsCursorMark = intsCursorBatchStart
 
-      tagCursorMark = tagCursorBatchStart
-      tagSubShiftCursorMark = tagSubShiftCursorBatchStart
-      strsCursorMark = strsCursorBatchStart
-      intsCursorMark = intsCursorBatchStart
-
-      true
+        true
+      } else {
+        nextTag()
+        false
+      }
     } else {
       false
     }

@@ -19,7 +19,7 @@ package test
 
 import org.scalacheck.{Arbitrary, Gen}
 
-import scala.{AnyVal, Array, Boolean, Char, Int, List, Predef, Unit}, Predef._
+import scala.{AnyVal, Array, Boolean, Char, Int, List, Nil, Predef, Unit}, Predef._
 import scala.language.postfixOps
 
 import java.lang.SuppressWarnings
@@ -28,6 +28,16 @@ object Generators {
   import Arbitrary.arbitrary
 
   type GenF[A] = Gen[Plate[A] => Unit]
+
+  // the existing one is terrible and filters things bizarrely
+  implicit def arbitraryList[A: Arbitrary]: Arbitrary[List[A]] =
+    Arbitrary(genList[A])
+
+  def genList[A: Arbitrary]: Gen[List[A]] =
+    Gen.oneOf(Gen.const(Nil), Gen.delay(genCons[A]))
+
+  def genCons[A: Arbitrary]: Gen[List[A]] =
+    arbitrary[A].flatMap(hd => genList[A].map(tl => hd :: tl))
 
   implicit def arbitraryPlateF[A]: Arbitrary[∀[λ[α => Plate[α] => Unit]]] = {
     // technically this is all safe because we're skolemizing on the Unit

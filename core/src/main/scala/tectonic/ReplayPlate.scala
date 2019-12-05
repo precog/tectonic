@@ -20,17 +20,15 @@ import cats.effect.Sync
 
 import scala.{Array, Boolean, Int, Long, None, Option, Some, StringContext, Unit}
 
-import java.lang.{CharSequence, IllegalStateException, SuppressWarnings, System}
+import java.lang.{CharSequence, IllegalStateException, System}
 
 /**
  * Produces None until finishBatch(true) is called.
  */
-@SuppressWarnings(
-  Array(
-    "org.wartremover.warts.Var",
-    "org.wartremover.warts.PublicInference",
-    "org.wartremover.warts.FinalVal"))
-final class ReplayPlate private (limit: Int, retainSkips: Boolean) extends Plate[Option[EventCursor]] {
+final class ReplayPlate private (
+    limit: Int,   // never grow the tag buffer size beyond this point
+    retainSkips: Boolean)
+    extends Plate[Option[EventCursor]] {
 
   // everything fits into a word
   private[this] final val Nul = EventCursor.Nul
@@ -146,7 +144,13 @@ final class ReplayPlate private (limit: Int, retainSkips: Boolean) extends Plate
       ()
     }
 
-  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+  final def appendBatchBoundary(): Unit =
+    appendTag(EndBatch)
+
+  final def tagBufferLength(): Int = tagBuffer.length
+  final def strsBufferLength(): Int = strsBuffer.length
+  final def intsBufferLength(): Int = intsBuffer.length
+
   private[this] final def appendTag(tag: Int): Unit = {
     checkTags()
     tagBuffer(tagPointer) |= tag.toLong << tagSubShift
@@ -159,7 +163,6 @@ final class ReplayPlate private (limit: Int, retainSkips: Boolean) extends Plate
     }
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Throw"))
   private[this] final def checkTags(): Unit = {
     if (tagSubShift == 0 && tagPointer >= tagBuffer.length) {
       if (tagBuffer.length * 2 > limit) {
@@ -178,7 +181,6 @@ final class ReplayPlate private (limit: Int, retainSkips: Boolean) extends Plate
     strsPointer += 1
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Throw"))
   private[this] final def checkStrs(): Unit = {
     if (strsPointer >= strsBuffer.length) {
       if (strsBuffer.length * 2 > limit) {
@@ -197,7 +199,6 @@ final class ReplayPlate private (limit: Int, retainSkips: Boolean) extends Plate
     intsPointer += 1
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Throw"))
   private[this] final def checkInts(): Unit = {
     if (intsPointer >= intsBuffer.length) {
       if (intsBuffer.length * 2 > limit) {
@@ -216,6 +217,6 @@ object ReplayPlate {
   // generally it just makes us much more efficient in the singleton cartesian case, and not much less efficient in the massive case
   val DefaultBufferSize: Int = 32
 
-  def apply[F[_]: Sync](limit: Int, retainSkips: Boolean): F[Plate[Option[EventCursor]]] =
+  def apply[F[_]: Sync](limit: Int, retainSkips: Boolean): F[ReplayPlate] =
     Sync[F].delay(new ReplayPlate(limit, retainSkips))
 }

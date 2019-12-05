@@ -18,11 +18,12 @@ package tectonic
 package test
 
 import cats.effect.IO
+import cats.implicits._
 
 import org.specs2.ScalaCheck
 import org.specs2.mutable._
 
-import scala.{Boolean, Int, List, Option, Predef, Unit}, Predef._
+import scala._, Predef._
 
 import java.lang.{CharSequence, IllegalStateException, Runtime}
 
@@ -52,6 +53,71 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       stream.length mustEqual expected.length
       result mustEqual expected
     }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors())
+
+    "round-trip events over multiple batches" in prop { (driver1: ∀[λ[α => Plate[α] => Unit]], drivers0: List[∀[λ[α => Plate[α] => Unit]]]) =>
+      // emulating nonemptylist
+      val drivers = driver1 :: drivers0
+      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
+
+      // we use init/last to avoid puttting batch boundaries at the end
+      drivers.init foreach { driver =>
+        driver[Option[EventCursor]](plate)
+        plate.appendBatchBoundary()
+      }
+
+      drivers.last[Option[EventCursor]](plate)
+
+      val streamOpt = plate.finishBatch(true)
+      streamOpt must beSome
+      val stream = streamOpt.get
+
+      // NB: this test relies on left-to-right traverse, which maybe isn't a good thing to rely on
+      val eff = drivers traverse { driver =>
+        for {
+          resultP <- ReifiedTerminalPlate[IO](false)
+
+          _ <- IO(stream.drive(resultP))
+          result <- IO(resultP.finishBatch(true))
+
+          expectedP <- ReifiedTerminalPlate[IO](false)
+          _ <- IO(driver[List[Event]](expectedP))
+          expected <- IO(expectedP.finishBatch(true))
+        } yield (result, expected)
+      }
+
+      val results = eff.unsafeRunSync()
+
+      val totalLength = results.map(_._2.length).sum
+      stream.length mustEqual (totalLength + drivers.length - 1)
+
+      results must contain({ (pair: (List[Event], List[Event])) =>
+        val (result, expected) = pair
+
+        result.length mustEqual expected.length
+        result mustEqual expected
+      }).forall
+    }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors())
+
+    "implement a trivial batch boundary" in {
+      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
+      plate.str("hi")
+      plate.appendBatchBoundary()
+      plate.num("42", -1, -1)
+
+      val Some(cursor) = plate.finishBatch(true)
+
+      val plate1 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
+      val plate2 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
+
+      cursor.drive(plate1)
+      cursor.nextBatch() must beTrue
+      cursor.drive(plate2)
+      cursor.nextBatch() must beFalse
+      cursor.nextBatch() must beFalse
+
+      plate1.finishBatch(true) mustEqual List(Event.Str("hi"))
+      plate2.finishBatch(true) mustEqual List(Event.Num("42", -1, -1))
+    }
 
     "only produce one row at a time" in {
       val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
