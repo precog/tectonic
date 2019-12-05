@@ -110,13 +110,61 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       val plate2 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
 
       cursor.drive(plate1)
-      cursor.nextBatch() must beTrue
+      cursor.establishBatch() must beTrue
       cursor.drive(plate2)
-      cursor.nextBatch() must beFalse
-      cursor.nextBatch() must beFalse
+      cursor.establishBatch() must beFalse
+      cursor.establishBatch() must beFalse
 
       plate1.finishBatch(true) mustEqual List(Event.Str("hi"))
       plate2.finishBatch(true) mustEqual List(Event.Num("42", -1, -1))
+    }
+
+    "reset to the start of the batch" in {
+      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
+      plate.str("hi")
+      plate.appendBatchBoundary()
+      plate.num("42", -1, -1)
+
+      val Some(cursor) = plate.finishBatch(true)
+
+      val plate1 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
+      cursor.drive(plate1)
+      cursor.establishBatch() must beTrue
+      cursor.drive(plate1)
+      cursor.reset()
+      cursor.drive(plate1)
+
+      plate1.finishBatch(true) mustEqual List(Event.Str("hi"), Event.Num("42", -1, -1), Event.Num("42", -1, -1))
+    }
+
+    "realign marks to the start of the batch" in {
+      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
+      plate.str("hi")
+      plate.finishRow()
+      plate.str("there")
+      plate.appendBatchBoundary()
+      plate.num("42", -1, -1)
+
+      val Some(cursor) = plate.finishBatch(true)
+
+      val plate1 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
+      cursor.nextRow(plate1)
+      cursor.mark()
+      cursor.nextRow(plate1)
+      cursor.rewind()
+      cursor.nextRow(plate1)
+      cursor.establishBatch() must beTrue
+      cursor.drive(plate1)
+      cursor.rewind()
+      cursor.drive(plate1)
+
+      plate1.finishBatch(true) mustEqual List(
+        Event.Str("hi"),
+        Event.Str("there"),
+        Event.Str("there"),
+        Event.Num("42", -1, -1),
+        Event.Num("42", -1, -1))
+
     }
 
     "only produce one row at a time" in {

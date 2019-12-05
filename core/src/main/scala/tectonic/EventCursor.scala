@@ -117,25 +117,25 @@ final class EventCursor private (
       throw new AssertionError
   }
 
-  // returns true if the batch is non-empty, false otherwise
-  def nextBatch(): Boolean = {
+  /**
+   * Sets the current batch window to to start wherever the cursor is
+   * currently pointing. Does not advance the cursor. Returns true if
+   * there actually *is* a batch here (even if the batch is empty),
+   * returns false if at EOF.
+   */
+  def establishBatch(): Boolean = {
     if (hasNext()) {
-      if (currentTag() != 0xD) {
-        tagCursorBatchStart = tagCursor
-        tagSubShiftCursorBatchStart = tagSubShiftCursor
-        strsCursorBatchStart = strsCursor
-        intsCursorBatchStart = intsCursor
+      tagCursorBatchStart = tagCursor
+      tagSubShiftCursorBatchStart = tagSubShiftCursor
+      strsCursorBatchStart = strsCursor
+      intsCursorBatchStart = intsCursor
 
-        tagCursorMark = tagCursorBatchStart
-        tagSubShiftCursorMark = tagSubShiftCursorBatchStart
-        strsCursorMark = strsCursorBatchStart
-        intsCursorMark = intsCursorBatchStart
+      tagCursorMark = tagCursorBatchStart
+      tagSubShiftCursorMark = tagSubShiftCursorBatchStart
+      strsCursorMark = strsCursorBatchStart
+      intsCursorMark = intsCursorBatchStart
 
-        true
-      } else {
-        nextTag()
-        false
-      }
+      true
     } else {
       false
     }
