@@ -299,15 +299,3 @@ object EventCursor {
     case object NextRowAndBatch extends NextRowStatus
   }
 }
-
-// 🦄
-// [events..., FinishRow, FinishBatch]
-// [events..., FinishRow]
-// [events..., FinishRow, events...]
-// [events..., FinishBatch]
-// [events...]
-
-// :-(
-// [events..., FinishRow]
-// [events..., FinishRow, events...]
-// [events...]
