@@ -118,7 +118,7 @@ final class EventCursor private (
   }
 
   /**
-   * Sets the current batch window to to start wherever the cursor is
+   * Sets the current batch window to start wherever the cursor is
    * currently pointing. Does not advance the cursor. Returns true if
    * there actually *is* a batch here (even if the batch is empty),
    * returns false if at EOF.
