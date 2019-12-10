@@ -119,6 +119,30 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       plate2.finishBatch(true) mustEqual List(Event.Num("42", -1, -1))
     }
 
+    "indicate end of batch when row is terminated at boundary" in {
+      import EventCursor.NextRowStatus.NextRowAndBatch
+
+      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
+      plate.str("hi")
+      plate.finishRow()
+      plate.appendBatchBoundary()
+      plate.num("42", -1, -1)
+      plate.finishRow()
+
+      val Some(cursor) = plate.finishBatch(true)
+
+      val plate1 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
+      val plate2 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
+
+      cursor.nextRow(plate1) mustEqual NextRowAndBatch
+      cursor.establishBatch() must beTrue
+      cursor.nextRow(plate2) mustEqual NextRowAndBatch
+      cursor.establishBatch() must beFalse
+
+      plate1.finishBatch(true) mustEqual List(Event.Str("hi"))
+      plate2.finishBatch(true) mustEqual List(Event.Num("42", -1, -1))
+    }
+
     "reset to the start of the batch" in {
       val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
       plate.str("hi")
