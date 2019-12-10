@@ -95,7 +95,17 @@ final class EventCursor private (
         case 0x8 => plate.nestArr()
         case 0x9 => plate.nestMeta(nextStr())
         case 0xA => plate.unnest()
-        case 0xB => continue = false
+
+        case 0xB =>
+          continue = false
+
+          // if we hit a row boundary, look ahead to see if we're also at a batch boundary
+          if (this.hasNext() && currentTag() == 0xD) {
+            // if we're at the batch boundary, advance over it
+            nextTag()
+            hasNext = false
+          }
+
         case 0xC => plate.skipped(nextInt())
 
         // we define end-of-batch to be analogous to end-of-stream
