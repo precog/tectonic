@@ -18,16 +18,14 @@ package tectonic
 package test
 
 import cats.effect.IO
-import cats.instances.list._
-import cats.syntax.flatMap._
-import cats.syntax.traverse._
+import cats.implicits._
 
 import org.specs2.ScalaCheck
 import org.specs2.mutable._
 
-import scala.{math, Boolean, Int, List, Option, Predef, Unit}, Predef._
+import scala._, Predef._
 
-import java.lang.{CharSequence, IllegalArgumentException, IllegalStateException, Runtime}
+import java.lang.{CharSequence, IllegalStateException, Runtime}
 
 object ReplayPlateSpecs extends Specification with ScalaCheck {
   import Generators._
@@ -56,6 +54,119 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       result mustEqual expected
     }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors())
 
+    "round-trip events over multiple batches" in prop { (driver1: ∀[λ[α => Plate[α] => Unit]], drivers0: List[∀[λ[α => Plate[α] => Unit]]]) =>
+      // emulating nonemptylist
+      val drivers = driver1 :: drivers0
+      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
+
+      // we use init/last to avoid puttting batch boundaries at the end
+      drivers.init foreach { driver =>
+        driver[Option[EventCursor]](plate)
+        plate.appendBatchBoundary()
+      }
+
+      drivers.last[Option[EventCursor]](plate)
+
+      val streamOpt = plate.finishBatch(true)
+      streamOpt must beSome
+      val stream = streamOpt.get
+
+      // NB: this test relies on left-to-right traverse, which maybe isn't a good thing to rely on
+      val eff = drivers traverse { driver =>
+        for {
+          resultP <- ReifiedTerminalPlate[IO](false)
+
+          _ <- IO(stream.drive(resultP))
+          result <- IO(resultP.finishBatch(true))
+
+          expectedP <- ReifiedTerminalPlate[IO](false)
+          _ <- IO(driver[List[Event]](expectedP))
+          expected <- IO(expectedP.finishBatch(true))
+        } yield (result, expected)
+      }
+
+      val results = eff.unsafeRunSync()
+
+      val totalLength = results.map(_._2.length).sum
+      stream.length mustEqual (totalLength + drivers.length - 1)
+
+      results must contain({ (pair: (List[Event], List[Event])) =>
+        val (result, expected) = pair
+
+        result.length mustEqual expected.length
+        result mustEqual expected
+      }).forall
+    }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors())
+
+    "implement a trivial batch boundary" in {
+      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
+      plate.str("hi")
+      plate.appendBatchBoundary()
+      plate.num("42", -1, -1)
+
+      val Some(cursor) = plate.finishBatch(true)
+
+      val plate1 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
+      val plate2 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
+
+      cursor.drive(plate1)
+      cursor.establishBatch() must beTrue
+      cursor.drive(plate2)
+      cursor.establishBatch() must beFalse
+      cursor.establishBatch() must beFalse
+
+      plate1.finishBatch(true) mustEqual List(Event.Str("hi"))
+      plate2.finishBatch(true) mustEqual List(Event.Num("42", -1, -1))
+    }
+
+    "reset to the start of the batch" in {
+      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
+      plate.str("hi")
+      plate.appendBatchBoundary()
+      plate.num("42", -1, -1)
+
+      val Some(cursor) = plate.finishBatch(true)
+
+      val plate1 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
+      cursor.drive(plate1)
+      cursor.establishBatch() must beTrue
+      cursor.drive(plate1)
+      cursor.reset()
+      cursor.drive(plate1)
+
+      plate1.finishBatch(true) mustEqual List(Event.Str("hi"), Event.Num("42", -1, -1), Event.Num("42", -1, -1))
+    }
+
+    "realign marks to the start of the batch" in {
+      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
+      plate.str("hi")
+      plate.finishRow()
+      plate.str("there")
+      plate.appendBatchBoundary()
+      plate.num("42", -1, -1)
+
+      val Some(cursor) = plate.finishBatch(true)
+
+      val plate1 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
+      cursor.nextRow(plate1)
+      cursor.mark()
+      cursor.nextRow(plate1)
+      cursor.rewind()
+      cursor.nextRow(plate1)
+      cursor.establishBatch() must beTrue
+      cursor.drive(plate1)
+      cursor.rewind()
+      cursor.drive(plate1)
+
+      plate1.finishBatch(true) mustEqual List(
+        Event.Str("hi"),
+        Event.Str("there"),
+        Event.Str("there"),
+        Event.Num("42", -1, -1),
+        Event.Num("42", -1, -1))
+
+    }
+
     "only produce one row at a time" in {
       val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
       plate.str("first")
@@ -79,95 +190,9 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       val (firstResults, row1, secondResults, row2) = eff.unsafeRunSync()
 
       firstResults mustEqual List(Event.Str("first"))
-      row1 mustEqual 0
+      row1 mustEqual EventCursor.NextRowStatus.NextRow
       secondResults mustEqual List(Event.Str("second"))
-      row2 mustEqual 2
-    }
-
-    "retain events when subdividing into multiple buffers" in prop { (driver: ∀[λ[α => Plate[α] => Unit]], size0: Int) =>
-      (size0 > Int.MinValue) ==> {
-        val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
-        driver[Option[EventCursor]](plate)
-
-        val stream = plate.finishBatch(true).get
-
-        (stream.length > 0) ==> {
-          val size = math.abs(size0) % stream.length
-
-          if (size == 0) {
-            stream.subdivide(size) must throwAn[IllegalArgumentException]
-          } else {
-            val partitions = stream.subdivide(size)
-
-            partitions must haveSize(be_>=(1))
-            partitions.map(countRows).sum mustEqual countRows(stream)
-
-            val lengths = partitions.map(_.length)
-            lengths.sum mustEqual stream.length
-            lengths must contain(be_>=((size / 16) * 16))
-
-            partitions must contain({ (ec: EventCursor) =>
-              val plate = ReifiedTerminalPlate[IO](false).unsafeRunSync()
-              ec.drive(plate)
-              ec.reset()
-              plate.finishBatch(true).last mustEqual Event.FinishRow
-            }).forall
-
-            val origEff =
-              ReifiedTerminalPlate[IO](false) flatMap { plate =>
-                IO(stream.drive(plate)) >> IO(plate.finishBatch(true))
-              }
-
-            val partEff = partitions traverse { substream =>
-              ReifiedTerminalPlate[IO](false) flatMap { plate =>
-                IO(substream.drive(plate)) >> IO(plate.finishBatch(true))
-              }
-            }
-
-            val originalResults = origEff.unsafeRunSync()
-            val partitionResults = partEff.unsafeRunSync().flatten
-
-            originalResults mustEqual partitionResults
-          }
-        }
-      }
-      pending   // TODO this test is flaky; tracked by ch8296
-    }.set(minTestsOk = 10000, workers = Runtime.getRuntime.availableProcessors())
-
-    /*
-      1. Find a boundary in the long *above* the ideal (to set cheatUp = false)
-      2. Fail to find at ideal long (to increment right and left)
-      3. Fail to find below (to increment right and left *again*)
-      4. Still be able to look below! Fail to find below. Fall off right
-      5. Fall off left
-
-
-      Six blocks, ideal fall into fourth block
-
-      Ideal has to be ~56
-
-      Five leading blocks
-      First finish row is at index 65
-      Fifth block overlaps with set of six blocks
-      Five more blocks
-      Ten blocks total
-      160 elements
-     */
-    "subdivide a cursor when cheating down in the mutual case rollover" in {
-      val plate = ReplayPlate[IO](52428800, true).unsafeRunSync()
-
-      (0 until (16 * 10 - 1)).foreach { i =>
-        if (i == 80) {
-          plate.finishRow()
-        }
-
-        plate.str(i.toString)
-      }
-
-      val ec = plate.finishBatch(true).get
-      val partitions = ec.subdivide(56)
-
-      partitions must haveSize(2)
+      row2 mustEqual EventCursor.NextRowStatus.NextRowAndBatch
     }
 
     "mark and rewind at arbitrary points" in {
@@ -318,7 +343,7 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
   def countRows(ec: EventCursor): Int = {
     var count = if (ec.length > 0) 1 else 0
 
-    while (ec.nextRow(NullPlate) == 0) {
+    while (ec.nextRow(NullPlate) == EventCursor.NextRowStatus.NextRow) {
       count += 1
     }
 
