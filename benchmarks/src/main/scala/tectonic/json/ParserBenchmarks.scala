@@ -17,9 +17,9 @@
 package tectonic
 package json
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.{Blocker, ContextShift, IO}
 
-import _root_.fs2.Chunk
+import _root_.fs2.{Chunk, Stream}
 import _root_.fs2.io.file
 
 import jawnfs2._
@@ -33,7 +33,7 @@ import scala.collection.immutable.List
 import scala.concurrent.ExecutionContext
 
 import java.nio.file.Paths
-import java.util.concurrent.{Executors, TimeUnit}
+import java.util.concurrent.TimeUnit
 
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -44,13 +44,6 @@ class ParserBenchmarks {
 
   private[this] implicit val CS: ContextShift[IO] =
     IO.contextShift(ExecutionContext.global)
-
-  private[this] val BlockingEC =
-    ExecutionContext.fromExecutor(Executors newCachedThreadPool { r =>
-      val t = new Thread(r)
-      t.setDaemon(true)
-      t
-    })
 
   private[this] val ChunkSize = 65536
 
@@ -100,10 +93,12 @@ class ParserBenchmarks {
       Jawn.TinyScalarCost,
       NumericCost)
 
-    val contents = file.readAll[IO](
-      ResourceDir.resolve(inputFile + ".json"),
-      BlockingEC,
-      ChunkSize)
+    val contents = Stream.resource(Blocker[IO]).flatMap { blocker => 
+      file.readAll[IO](
+        ResourceDir.resolve(inputFile + ".json"),
+        blocker,
+        ChunkSize)
+    }
 
     val processed = if (framework == TectonicFramework) {
       val mode = if (inputMode) Parser.UnwrapArray else Parser.ValueStream
