@@ -712,7 +712,6 @@ final class Parser[F[_], A] private (
       "org.wartremover.warts.NonUnitStatements",
       "org.wartremover.warts.Equals"))
   protected[this] def rparse(state: Int, j: Int, ring: Long, offset: Int, fallback: BList): Int = {
-    // okay this is a problem. we reset(j) here...
     val i = reset(j)
     checkpoint(state, i, ring, offset, fallback)
 
