@@ -175,6 +175,7 @@ abstract class BaseParser[F[_], A] {
 
   // every 1M we shift our array back to the beginning.
   protected[this] final def reset(i: Int): Int = {
+    // ...but over here, we don't consider `i` as part of our reset calculation! we just consider `offset`, which we haven't updated yet
     if (offset >= 1048576) {
       val diff = offset
       curr -= diff
