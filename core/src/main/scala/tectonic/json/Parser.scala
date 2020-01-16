@@ -259,6 +259,7 @@ final class Parser[F[_], A] private (
         } else {
           // jump straight back into rparse
           offset = reset(offset)
+          curr = reset(curr)    // we reset both of these, because offset only gets updated when the "row" finishes
 
           val j = if (state <= 0) {
             parse(offset)

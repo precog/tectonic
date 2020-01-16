@@ -130,8 +130,8 @@ abstract class BaseParser[F[_], A] {
   final def absorb(s: String)(implicit F: Sync[F]): F[Either[ParseException, A]] =
     F.suspend(absorb(ByteBuffer.wrap(s.getBytes(BaseParser.Utf8))))
 
-  protected[this] final def unsafeData(): Array[Byte] = data
-  protected[this] final def unsafeLen(): Int = len
+  protected[tectonic] final def unsafeData(): Array[Byte] = data
+  protected[tectonic] final def unsafeLen(): Int = len
 
   /**
    * This is a specialized accessor for the case where our underlying data are
@@ -175,14 +175,14 @@ abstract class BaseParser[F[_], A] {
 
   // every 1M we shift our array back to the beginning.
   protected[this] final def reset(i: Int): Int = {
-    if (offset >= 1048576) {
-      val diff = offset
+    if (i >= 1048576) {
+      val diff = i
       curr -= diff
       len -= diff
       offset = 0
       pos -= diff
       System.arraycopy(data, diff, data, 0, len)
-      i - diff
+      0
     } else {
       i
     }

@@ -15,13 +15,14 @@
  */
 
 package tectonic
-package test
 
 import cats.effect.IO
 import cats.implicits._
 
 import org.specs2.ScalaCheck
 import org.specs2.mutable._
+
+import tectonic.test.{Event, Generators, ReifiedTerminalPlate}
 
 import scala._, Predef._
 
@@ -374,22 +375,5 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
     ec.reset()
 
     count
-  }
-
-  object NullPlate extends Plate[Unit] {
-    def arr() = Signal.Continue
-    def finishBatch(terminal: Boolean) = ()
-    def finishRow() = ()
-    def fls() = Signal.Continue
-    def map() = Signal.Continue
-    def nestArr() = Signal.Continue
-    def nestMap(pathComponent: CharSequence) = Signal.Continue
-    def nestMeta(pathComponent: CharSequence) = Signal.Continue
-    def nul() = Signal.Continue
-    def num(s: CharSequence,decIdx: Int,expIdx: Int) = Signal.Continue
-    def skipped(bytes: Int) = ()
-    def str(s: CharSequence) = Signal.Continue
-    def tru() = Signal.Continue
-    def unnest() = Signal.Continue
   }
 }

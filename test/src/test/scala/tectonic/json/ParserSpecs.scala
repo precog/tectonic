@@ -18,6 +18,7 @@ package tectonic
 package json
 
 import cats.effect.IO
+import cats.implicits._
 
 import org.specs2.mutable.Specification
 
@@ -365,6 +366,40 @@ object ParserSpecs extends Specification {
       first must beRight(List(Skipped(3)))
       second must beRight(expected)
       third must beRight(Nil)
+    }
+  }
+
+  "asynchronous state management" should {
+    "ensure buffer is appropriately paged within the row" in {
+      // parse ≥ 2 MB out of a single row and ensure the buffer never exceeds 1 MB + ε
+
+      val front = "[{\"foo\":42"
+      val middle = ",\"bar\":{\"baz\":[1, 2, 3, 4], \"bin\":false},\"quix\":\"hi\"},{\"foo\":42"
+      val end = "\"}]"
+
+      val middleCount = ((2 * 1024 * 1024) - front.length - end.length) / middle.length + 1
+      val epsilon = front.length + middle.length + end.length
+
+      def replicate[A](fa: IO[A], n: Int): IO[Unit] =
+        if (n > 0) fa.void >> replicate(fa, n - 1) else fa.void
+
+      val ioa = for {
+        parser <- Parser[IO, Unit](IO.pure(NullPlate), Parser.ValueStream)
+        _ <- parser.absorb(front)
+        _ <- replicate(parser.absorb(middle).rethrow, middleCount)
+        _ <- parser.absorb(end)
+
+        len <- IO(parser.unsafeLen())
+
+        _ <- parser.finish
+
+        len2 <- IO(parser.unsafeLen())
+      } yield (len, len2)
+
+      val (len, len2) = ioa.unsafeRunSync()
+
+      len must beLessThan(1024 * 1024 + epsilon)
+      len2 must beLessThan(1024 * 1024 + epsilon)
     }
   }
 }
