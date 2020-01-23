@@ -19,7 +19,7 @@ package json
 
 import cats.effect.{Blocker, ContextShift, IO, Sync}
 
-import _root_.fs2.{Chunk, Stream}
+import _root_.fs2.Chunk
 import _root_.fs2.io.file
 
 import org.openjdk.jmh.annotations.{Benchmark, BenchmarkMode, Mode, OutputTimeUnit, Param, Scope, State}
@@ -31,7 +31,7 @@ import scala.collection.immutable.List
 import scala.concurrent.ExecutionContext
 
 import java.nio.file.Paths
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{Executors, TimeUnit}
 
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -39,6 +39,14 @@ import java.util.concurrent.TimeUnit
 class SkipBenchmarks {
   private[this] implicit val CS: ContextShift[IO] =
     IO.contextShift(ExecutionContext.global)
+
+  private[this] val BlockingPool =
+    Blocker.liftExecutionContext(
+      ExecutionContext.fromExecutor(Executors newCachedThreadPool { r =>
+        val t = new Thread(r)
+        t.setDaemon(true)
+        t
+      }))
 
   private[this] val ChunkSize = 65536
 
@@ -65,12 +73,10 @@ class SkipBenchmarks {
       back <- ProjectionPlate[IO, List[Nothing]](terminal, "bar", enableSkips)
     } yield back
 
-    val contents = Stream.resource(Blocker[IO]).flatMap { blocker => 
-      file.readAll[IO](
-        ResourceDir.resolve("ugh10k.json"),
-        blocker,
-        ChunkSize)
-    }
+    val contents = file.readAll[IO](
+      ResourceDir.resolve("ugh10k.json"),
+      BlockingPool,
+      ChunkSize)
 
     val parser = StreamParser(Parser(plateF, Parser.UnwrapArray))(
       _ => Chunk.empty[Nothing],
