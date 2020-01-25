@@ -17,7 +17,7 @@
 package tectonic
 package json
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.{Blocker, ContextShift, IO}
 
 import _root_.fs2.Chunk
 import _root_.fs2.io.file
@@ -45,12 +45,13 @@ class ParserBenchmarks {
   private[this] implicit val CS: ContextShift[IO] =
     IO.contextShift(ExecutionContext.global)
 
-  private[this] val BlockingEC =
-    ExecutionContext.fromExecutor(Executors newCachedThreadPool { r =>
-      val t = new Thread(r)
-      t.setDaemon(true)
-      t
-    })
+  private[this] val BlockingPool =
+    Blocker.liftExecutionContext(
+      ExecutionContext.fromExecutor(Executors newCachedThreadPool { r =>
+        val t = new Thread(r)
+        t.setDaemon(true)
+        t
+      }))
 
   private[this] val ChunkSize = 65536
 
@@ -102,7 +103,7 @@ class ParserBenchmarks {
 
     val contents = file.readAll[IO](
       ResourceDir.resolve(inputFile + ".json"),
-      BlockingEC,
+      BlockingPool,
       ChunkSize)
 
     val processed = if (framework == TectonicFramework) {

@@ -6,7 +6,7 @@ scmInfo in ThisBuild := Some(ScmInfo(
   url("https://github.com/slamdata/tectonic"),
   "scm:git@github.com:slamdata/tectonic.git"))
 
-val Fs2Version = "1.0.5"
+val Fs2Version = "2.1.0"
 
 ThisBuild / publishAsOSSProject := true
 
@@ -73,7 +73,7 @@ lazy val benchmarks = project
       "co.fs2" %% "fs2-core" % Fs2Version,
       "co.fs2" %% "fs2-io"   % Fs2Version,
 
-      "org.http4s" %% "jawn-fs2" % "0.14.2"))
+      "org.http4s" %% "jawn-fs2" % "0.15.0"))
   .settings(    // magic rewiring so sbt-jmh works sanely
     Jmh / sourceDirectory := (Compile / sourceDirectory).value,
     Jmh / classDirectory := (Compile / classDirectory).value,
