@@ -6,7 +6,7 @@ scmInfo in ThisBuild := Some(ScmInfo(
   url("https://github.com/slamdata/tectonic"),
   "scm:git@github.com:slamdata/tectonic.git"))
 
-val Fs2Version = "2.1.0"
+val Fs2Version = "2.2.1"
 
 ThisBuild / publishAsOSSProject := true
 
