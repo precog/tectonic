@@ -17,7 +17,7 @@
 package tectonic
 package json
 
-import cats.effect.{ContextShift, IO, Sync}
+import cats.effect.{Blocker, ContextShift, IO, Sync}
 
 import _root_.fs2.Chunk
 import _root_.fs2.io.file
@@ -40,12 +40,13 @@ class SkipBenchmarks {
   private[this] implicit val CS: ContextShift[IO] =
     IO.contextShift(ExecutionContext.global)
 
-  private[this] val BlockingEC =
-    ExecutionContext.fromExecutor(Executors newCachedThreadPool { r =>
-      val t = new Thread(r)
-      t.setDaemon(true)
-      t
-    })
+  private[this] val BlockingPool =
+    Blocker.liftExecutionContext(
+      ExecutionContext.fromExecutor(Executors newCachedThreadPool { r =>
+        val t = new Thread(r)
+        t.setDaemon(true)
+        t
+      }))
 
   private[this] val ChunkSize = 65536
 
@@ -74,7 +75,7 @@ class SkipBenchmarks {
 
     val contents = file.readAll[IO](
       ResourceDir.resolve("ugh10k.json"),
-      BlockingEC,
+      BlockingPool,
       ChunkSize)
 
     val parser = StreamParser(Parser(plateF, Parser.UnwrapArray))(
