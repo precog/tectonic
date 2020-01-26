@@ -21,7 +21,7 @@ import tectonic.Signal.{Continue, SkipColumn, SkipRow, Terminate}
 
 import org.specs2.mutable.Specification
 
-object SignalSpecs extends Specification {
+class SignalSpecs extends Specification {
 
   "Signal.and" should {
 

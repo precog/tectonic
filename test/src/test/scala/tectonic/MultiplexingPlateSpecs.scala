@@ -22,7 +22,7 @@ import scala._
 import cats.effect.IO
 import org.specs2.mutable.Specification
 
-object MultiplexingPlateSpecs extends Specification {
+class MultiplexingPlateSpecs extends Specification {
 
   "MultiplexingPlate" should {
     "retain state" >> {

@@ -1,5 +1,7 @@
 language: scala
-scala: 2.12.10
+scala:
+  - 2.13.1
+  - 2.12.10
 
 cache:
   directories:
@@ -45,7 +47,7 @@ script: $SBT ++$TRAVIS_SCALA_VERSION test
 
 after_success:
   - |-
-    if [[ "$TRAVIS_JDK" =~ adopt ]]; then
+    if [[ "$TRAVIS_JDK" =~ adopt ]] && [[ "$TRAVIS_SCALA_VERSION" =~ 2.12 ]]; then
       if [[ "$TRAVIS_PULL_REQUEST" == "false" ]] && [[ "$TRAVIS_BRANCH" =~ backport/v.*|master ]]; then
         scripts/tectonicPublishAndTag
       fi
