@@ -48,7 +48,8 @@ after_success:
   - |-
     if [[ "$TRAVIS_JDK" =~ adopt ]] && [[ "$TRAVIS_SCALA_VERSION" =~ 2.12 ]]; then
       if [[ "$TRAVIS_PULL_REQUEST" == "false" ]] && [[ "$TRAVIS_BRANCH" =~ backport/v.*|master ]]; then
-        scripts/tectonicPublishAndTag
+        # fake the job number since we already know it's okay
+        TRAVIS_JOB_NUMBER=1 scripts/tectonicPublishAndTag
       fi
 
       scripts/checkAndAutoMerge
