@@ -46,6 +46,8 @@ install:
 script: $SBT ++$TRAVIS_SCALA_VERSION test
 
 after_success:
+  - echo "$TRAVIS_SCALA_VERSION"
+  - if [[ "$TRAVIS_SCALA_VERSION" =~ 2.12 ]]; then echo 'compared true'; fi
   - |-
     if [[ "$TRAVIS_JDK" =~ adopt ]] && [[ "$TRAVIS_SCALA_VERSION" =~ 2.12 ]]; then
       if [[ "$TRAVIS_PULL_REQUEST" == "false" ]] && [[ "$TRAVIS_BRANCH" =~ backport/v.*|master ]]; then
