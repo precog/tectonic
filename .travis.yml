@@ -1,4 +1,5 @@
 language: scala
+
 scala:
   - 2.13.1
   - 2.12.10
@@ -10,12 +11,10 @@ cache:
     - $HOME/.coursier/cache
     - '.hoarder-cache'
 
-matrix:
-  include:
-    - env: [TRAVIS_JDK=adopt@1.8.0-222]
-    - env: [TRAVIS_JDK=graalvm@19.2.0]
-
 env:
+  jobs:
+    - TRAVIS_JDK=adopt@1.8.0-222
+    - TRAVIS_JDK=graalvm@19.2.0
   global:
     - JABBA_HOME=/home/travis/.jabba
     - COURSIER_PROGRESS=0
@@ -47,7 +46,7 @@ script: $SBT ++$TRAVIS_SCALA_VERSION test
 
 after_success:
   - |-
-    if [[ "$TRAVIS_JDK" =~ adopt && "$TRAVIS_SCALA_VERSION" =~ 2.12 ]]; then
+    if [[ "$TRAVIS_JDK" =~ adopt ]] && [[ "$TRAVIS_SCALA_VERSION" =~ 2.12 ]]; then
       if [[ "$TRAVIS_PULL_REQUEST" == "false" ]] && [[ "$TRAVIS_BRANCH" =~ backport/v.*|master ]]; then
         scripts/tectonicPublishAndTag
       fi
