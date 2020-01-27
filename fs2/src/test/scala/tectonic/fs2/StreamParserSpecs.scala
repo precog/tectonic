@@ -33,7 +33,7 @@ import scala.{Byte, List}
 
 import java.nio.ByteBuffer
 
-object StreamParserSpecs extends Specification {
+class StreamParserSpecs extends Specification {
   import Event._
 
   val parserF: IO[BaseParser[IO, List[Event]]] =

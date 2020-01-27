@@ -24,7 +24,7 @@ import tectonic.test.csv._
 
 import scala.List
 
-object ParserSpecs extends Specification {
+class ParserSpecs extends Specification {
   import Event._
 
   "excel-style" should {

@@ -28,7 +28,7 @@ import scala._, Predef._
 
 import java.lang.{CharSequence, IllegalStateException, Runtime}
 
-object ReplayPlateSpecs extends Specification with ScalaCheck {
+class ReplayPlateSpecs extends Specification with ScalaCheck {
   import Generators._
 
   "ReplayPlate" should {
@@ -105,7 +105,9 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       plate.appendBatchBoundary()
       plate.num("42", -1, -1)
 
-      val Some(cursor) = plate.finishBatch(true)
+      val cursorOpt = plate.finishBatch(true)
+      cursorOpt must beSome
+      val cursor = cursorOpt.get
 
       val plate1 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
       val plate2 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
@@ -130,7 +132,9 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       plate.num("42", -1, -1)
       plate.finishRow()
 
-      val Some(cursor) = plate.finishBatch(true)
+      val cursorOpt = plate.finishBatch(true)
+      cursorOpt must beSome
+      val cursor = cursorOpt.get
 
       val plate1 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
       val plate2 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
@@ -150,7 +154,9 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       plate.appendBatchBoundary()
       plate.num("42", -1, -1)
 
-      val Some(cursor) = plate.finishBatch(true)
+      val cursorOpt = plate.finishBatch(true)
+      cursorOpt must beSome
+      val cursor = cursorOpt.get
 
       val plate1 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
       cursor.drive(plate1)
@@ -170,7 +176,9 @@ object ReplayPlateSpecs extends Specification with ScalaCheck {
       plate.appendBatchBoundary()
       plate.num("42", -1, -1)
 
-      val Some(cursor) = plate.finishBatch(true)
+      val cursorOpt = plate.finishBatch(true)
+      cursorOpt must beSome
+      val cursor = cursorOpt.get
 
       val plate1 = ReifiedTerminalPlate[IO](false).unsafeRunSync()
       cursor.nextRow(plate1)

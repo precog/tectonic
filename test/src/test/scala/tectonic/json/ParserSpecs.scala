@@ -29,10 +29,9 @@ import scala.{Array, Boolean, Byte, Int, List, Nil, Unit, Predef}, Predef._
 import scala.collection.mutable
 import scala.util.{Either, Left, Right}
 
-import java.lang.{CharSequence, SuppressWarnings}
+import java.lang.CharSequence
 
-@SuppressWarnings(Array("org.wartremover.warts.Equals"))
-object ParserSpecs extends Specification {
+class ParserSpecs extends Specification {
   import Event._
 
   "utf-8 byte handling" should {
@@ -365,7 +364,7 @@ object ParserSpecs extends Specification {
 
       first must beRight(List(Skipped(3)))
       second must beRight(expected)
-      third must beRight(Nil)
+      third must beRight(Nil: List[Event])
     }
   }
 
