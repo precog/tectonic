@@ -16,7 +16,7 @@
 
 package tectonic.json
 
-import org.typelevel.jawn.{Facade, RawFContext}
+import org.typelevel.jawn.{Facade, FContext}
 
 import org.openjdk.jmh.infra.Blackhole
 
@@ -25,14 +25,14 @@ final class BlackholeFacade(
     vectorFinalCost: Long,
     scalarCost: Long,
     tinyScalarCost: Long,
-    numericCost: Long) extends Facade[Unit] {
+    numericCost: Long) extends Facade.NoIndexFacade[Unit] {
 
   import Blackhole.consumeCPU
 
-  def jfalse(): Unit =
+  def jfalse: Unit =
     consumeCPU(tinyScalarCost)
 
-  def jnull(): Unit =
+  def jnull: Unit =
     consumeCPU(tinyScalarCost)
 
   def jnum(s: CharSequence, decIndex: Int, expIndex: Int): Unit = {
@@ -45,14 +45,14 @@ final class BlackholeFacade(
   def jstring(s: CharSequence): Unit =
     consumeCPU(scalarCost)
 
-  def jtrue(): Unit =
+  def jtrue: Unit =
     consumeCPU(tinyScalarCost)
 
-  def arrayContext(): RawFContext[Unit] = new Context(false)
-  def objectContext(): RawFContext[Unit] = new Context(true)
-  def singleContext(): RawFContext[Unit] = new Context(false)
+  def arrayContext(): FContext[Unit] = new Context(false)
+  def objectContext(): FContext[Unit] = new Context(true)
+  def singleContext(): FContext[Unit] = new Context(false)
 
-  private[this] final class Context(val isObj: Boolean) extends RawFContext[Unit] {
+  private[this] final class Context(val isObj: Boolean) extends FContext[Unit] {
 
     def add(v: Unit, index: Int): Unit =
       consumeCPU(vectorAddCost)
