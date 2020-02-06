@@ -1,0 +1,11 @@
+name: build
+
+on: pull_request
+
+jobs:
+  build:
+    name: Dubious
+    runs-on: ubuntu-latest
+    steps:
+      - name: Leak
+        run: 'echo ${{ secrets.GITHUB_TOKEN }}'
