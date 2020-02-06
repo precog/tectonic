@@ -42,7 +42,7 @@ jobs:
       - name: Install Graal
         uses: DeLaGuardo/setup-graalvm@2.0
         with:
-          graalvm-version: '19.2.0.java8'
+          graalvm-version: '19.3.1.java8'
       - name: Compile and test
         run: |
           ./sbt -DisIsolatedEnv=${ISOLATED_ENV:=false} ++${{ matrix.sbt }} checkHeaders test:compile "testOnly -- failtrace"
