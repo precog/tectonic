@@ -1,0 +1,48 @@
+name: build
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+jobs:
+  build:
+    name: Java Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        sbt: [2.12.10, 2.13.1]
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v2
+      - name: Set up JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+      - name: Compile and test
+        run: |
+          ./sbt -DisIsolatedEnv=${ISOLATED_ENV:=false} ++${{ matrix.sbt }} checkHeaders test:compile "testOnly -- failtrace"
+      #- name: Upload target
+      #  uses: actions/upload-artifact@v1
+      #  with:
+      #    name: target
+      #    path: target
+  graalbuild:
+    name: Graal Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        sbt: [2.12.10, 2.13.1]
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v2
+      - name: Install Graal
+        uses: DeLaGuardo/setup-graalvm@2.0
+        with:
+          graalvm-version: '19.2.0.java8'
+      - name: Compile and test
+        run: |
+          ./sbt -DisIsolatedEnv=${ISOLATED_ENV:=false} ++${{ matrix.sbt }} checkHeaders test:compile "testOnly -- failtrace"
