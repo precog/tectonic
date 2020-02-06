@@ -1,0 +1,108 @@
+name: build
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+jobs:
+  build:
+    name: Java Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        scala: [2.12.10, 2.13.1]
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v2
+      - name: Set up JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+      - name: Setup Git Actor
+        run: git config github.actor slamdata-bot
+      - name: Compile and test
+        run: |
+          ./sbt -DisIsolatedEnv=${ISOLATED_ENV:=false} ++${{ matrix.scala }} checkHeaders test:compile "testOnly -- failtrace"
+      - name: Upload target
+        uses: actions/upload-artifact@v1
+        with:
+          name: target-jdk-${{ matrix.scala }}
+          path: target
+
+  graalbuild:
+    name: Graal Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        scala: [2.12.10, 2.13.1]
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v2
+      - name: Install Graal
+        uses: DeLaGuardo/setup-graalvm@2.0
+        with:
+          graalvm-version: '19.3.1.java8'
+      - name: Setup Git Actor
+        run: git config github.actor slamdata-bot
+      - name: Compile and test
+        run: ./sbt -DisIsolatedEnv=${ISOLATED_ENV:=false} ++${{ matrix.scala }} checkHeaders test:compile "testOnly -- failtrace"
+      - name: Upload target
+        uses: actions/upload-artifact@v1
+        with:
+          name: target-graal-${{ matrix.scala }}
+          path: target
+
+  publishandtag:
+    name: Publish and Tag
+    if: github.event_name != 'pull_request' && (contains(github.head_ref, 'backport/v.*') || contains(github.head_ref, 'master'))
+    needs: [build]
+    runs-on: [ubuntu-latest]
+    strategy:
+       matrix:
+         scala: [2.12.10]
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v2
+      - name: Download target artifacts
+        uses: actions/download-artifact@v1
+        with:
+          name: target-jdk-${{ matrix.scala }}
+      - name: Publish Tag
+        run: ./scripts/tectonicPublishAndTag
+
+  automerge:
+    name: Auto Merge
+    if: github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump')
+    needs: [build]
+    runs-on: [ubuntu-latest]
+    strategy:
+       matrix:
+         scala: [2.12.10]
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v2
+      - name: Download target artifacts
+        uses: actions/download-artifact@v1
+        with:
+          name: target-jdk-${{ matrix.scala }}
+      - name: Setup Git Actor
+        run: git config github.actor slamdata-bot
+      - name: Install common resources
+        run: ./sbt transferCommonResources
+      - name: Install ruby
+        uses: actions/setup-ruby@v1
+        with:
+          ruby-version: '2.6'
+      - name: Set env vars
+        run: |
+          echo ::set-env name=VERSIONS::$(git diff HEAD^1 | grep -e '^[-+][0-9]' | sed 's/^[+\-]//' | sed 's/\.[0-9]*$//' | uniq | wc -l)
+          echo ::set-env name=CLONE_DIR::$(mktemp -d "/tmp/slamdata-bump.XXXXXXXX")
+          echo ::set-env name=IS_REVISION_LABEL::${{ contains(github.event.pull_request.labels.*.name, 'revision') }}
+          echo ::set-env name=REPO_SLUG::${{ github.repository }}
+          echo ::set-env name=PR_NUMBER::$(echo "$GITHUB_REF" | cut -d'/' -f3)
+      - name: Run automerge
+        run: ./scripts/core/checkAndAutoMerge
