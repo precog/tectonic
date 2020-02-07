@@ -58,6 +58,7 @@ jobs:
   publishandtag:
     name: Publish and Tag
     if: github.event_name != 'pull_request'  && (contains(github.head_ref, 'backport/v.*') || contains(github.head_ref, 'master'))
+    needs: [build]
     runs-on: [ubuntu-latest]
     strategy:
        matrix:
@@ -76,6 +77,7 @@ jobs:
   automerge:
     name: Publish and Tag
     if: github.event_name == 'pull_request' #&& contains(github.head_ref, 'version-bump')
+    needs: [build]
     runs-on: [ubuntu-latest]
     strategy:
        matrix:
