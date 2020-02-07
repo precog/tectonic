@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        sbt: [2.12.10, 2.13.1]
+        scala: [2.12.10, 2.13.1]
     steps:
       - name: Checkout branch
         uses: actions/checkout@v2
@@ -23,19 +23,19 @@ jobs:
           java-version: 1.8
       - name: Compile and test
         run: |
-          ./sbt -DisIsolatedEnv=${ISOLATED_ENV:=false} ++${{ matrix.sbt }} checkHeaders test:compile "testOnly -- failtrace"
-      #- name: Upload target
-      #  uses: actions/upload-artifact@v1
-      #  with:
-      #    name: target
-      #    path: target
+          ./sbt -DisIsolatedEnv=${ISOLATED_ENV:=false} ++${{ matrix.scala }} checkHeaders test:compile "testOnly -- failtrace"
+      - name: Upload target
+        uses: actions/upload-artifact@v1
+        with:
+          name: target-jdk-${{ matrix.scala }}
+          path: target
   graalbuild:
     name: Graal Build
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest]
-        sbt: [2.12.10, 2.13.1]
+        scala: [2.12.10, 2.13.1]
     steps:
       - name: Checkout branch
         uses: actions/checkout@v2
@@ -43,6 +43,56 @@ jobs:
         uses: DeLaGuardo/setup-graalvm@2.0
         with:
           graalvm-version: '19.3.1.java8'
+      - name: Setup Git Actor
+        run: git config github.actor slamdata-bot
       - name: Compile and test
-        run: |
-          ./sbt -DisIsolatedEnv=${ISOLATED_ENV:=false} ++${{ matrix.sbt }} checkHeaders test:compile "testOnly -- failtrace"
+        run: ./sbt -DisIsolatedEnv=${ISOLATED_ENV:=false} ++${{ matrix.scala }} checkHeaders test:compile "testOnly -- failtrace"
+      - name: Upload target
+        uses: actions/upload-artifact@v1
+        with:
+          name: target-graal-${{ matrix.scala }}
+          path: target
+
+  publishandtag:
+    name: Publish and Tag
+    if: github.event_name != 'pull_request'  && (contains(github.head_ref, 'backport/v.*') || contains(github.head_ref, 'master'))
+    runs-on: [ubuntu-latest]
+    strategy:
+       matrix:
+         scala: [2.12.10]
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v2
+      - name: Download target artifacts
+        uses: actions/download-artifact@v1
+        with:
+          name: target-jdk-${{ matrix.scala }}
+      - name: Publish Tag Auto Merge
+        run: ls -al ./scripts/*
+        #run: ./scripts/tectonicPublishAndTag
+
+  automerge:
+    name: Publish and Tag
+    if: github.event_name == 'pull_request' #&& contains(github.head_ref, 'version-bump')
+    runs-on: [ubuntu-latest]
+    strategy:
+       matrix:
+         scala: [2.12.10]
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v2
+      - name: Download target artifacts
+        uses: actions/download-artifact@v1
+        with:
+          name: target-jdk-${{ matrix.scala }}
+      - name: Setup Git Actor
+        run: git config github.actor slamdata-bot
+      - name: Install common resources
+        run: ./sbt transferCommonResources
+      - name: Install ruby
+        uses: actions/setup-ruby@v1
+        with:
+          ruby-version: '2.6'
+      - name: Auto Merge
+        run: ls -al ./scripts/*
+        #run: ./scripts/checkAndAutoMerge
