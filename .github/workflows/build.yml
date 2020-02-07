@@ -31,6 +31,7 @@ jobs:
         with:
           name: target-jdk-${{ matrix.scala }}
           path: target
+
   graalbuild:
     name: Graal Build
     runs-on: ${{ matrix.os }}
@@ -103,6 +104,5 @@ jobs:
           echo ::set-env name=IS_REVISION_LABEL::${{ contains(github.event.pull_request.labels.*.name, 'revision') }}
           echo ::set-env name=REPO_SLUG::${{ github.repository }}
           echo ::set-env name=PR_NUMBER::$(echo "$GITHUB_REF" | cut -d'/' -f3)
-      - name: Check auto merge
       - name: Run automerge
         run: ./scripts/core/checkAndAutoMerge
