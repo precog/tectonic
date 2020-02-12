@@ -98,8 +98,12 @@ jobs:
           name: target-jdk-${{ matrix.scala }}
       - name: Setup Git Actor
         run: git config github.actor slamdata-bot
+      - name: Set up JDK ${{ env.JDK }}
+        uses: actions/setup-java@v1
+        with:
+          java-version: ${{ env.JDK }}
       - name: Install common resources
-        run: ./sbt transferCommonResources
+        run: $SBT transferCommonResources
       - name: Install ruby
         uses: actions/setup-ruby@v1
         with:
