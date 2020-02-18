@@ -1,4 +1,4 @@
-name: build
+name: tectonicbuild
 
 on:
   pull_request:
@@ -31,8 +31,7 @@ jobs:
       - name: Setup Git Actor
         run: git config github.actor slamdata-bot
       - name: Compile and test
-        run: |
-          $SBT ++${{ matrix.scala }} ci
+        run: $SBT ++${{ matrix.scala }} ci
       - name: Upload target
         uses: actions/upload-artifact@v1
         with:
@@ -78,6 +77,10 @@ jobs:
         uses: actions/download-artifact@v1
         with:
           name: target-jdk-${{ matrix.scala }}
+      - name: Transfer Common Resources
+        run: $SBT transferCommonResources
+      - name: Export common secrets
+        run: $SBT exportSecretsForActions
       - name: Publish Tag
         run: ./scripts/tectonicPublishAndTag
 
@@ -98,22 +101,23 @@ jobs:
           name: target-jdk-${{ matrix.scala }}
       - name: Setup Git Actor
         run: git config github.actor slamdata-bot
+      - name: Install ruby
+        uses: actions/setup-ruby@v1
+        with:
+          ruby-version: '2.6'
       - name: Set up JDK ${{ env.JDK }}
         uses: actions/setup-java@v1
         with:
           java-version: ${{ env.JDK }}
       - name: Install common resources
         run: $SBT transferCommonResources
-      - name: Install ruby
-        uses: actions/setup-ruby@v1
-        with:
-          ruby-version: '2.6'
+      - name: Export common secrets
+        run: $SBT exportSecretsForActions
       - name: Set env vars
         run: |
           echo ::set-env name=VERSIONS::$(git diff HEAD^1 | grep -e '^[-+][0-9]' | sed 's/^[+\-]//' | sed 's/\.[0-9]*$//' | uniq | wc -l)
           echo ::set-env name=CLONE_DIR::$(mktemp -d "/tmp/slamdata-bump.XXXXXXXX")
           echo ::set-env name=IS_REVISION_LABEL::${{ contains(github.event.pull_request.labels.*.name, 'revision') }}
-          echo ::set-env name=REPO_SLUG::${{ github.repository }}
           echo ::set-env name=PR_NUMBER::$(echo "$GITHUB_REF" | cut -d'/' -f3)
       - name: Run automerge
         run: ./scripts/core/checkAndAutoMerge
