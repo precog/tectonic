@@ -14,7 +14,7 @@ env:
   ENCRYPTION_PASSWORD: ${{ secrets.ENCRYPTION_PASSWORD }}
 
 jobs:
-  build:
+  jdk-build:
     name: Java Build
     runs-on: ${{ matrix.os }}
     strategy:
@@ -32,13 +32,13 @@ jobs:
         run: git config github.actor slamdata-bot
       - name: Compile and test
         run: $SBT ++${{ matrix.scala }} ci
-      - name: Upload target
+      - name: Upload working directory
         uses: actions/upload-artifact@v1
         with:
-          name: target-jdk-${{ matrix.scala }}
-          path: target
+          name: working-dir-jdk-${{ matrix.scala }}
+          path: .
 
-  graalbuild:
+  graal-build:
     name: Graal Build
     runs-on: ${{ matrix.os }}
     strategy:
@@ -59,10 +59,10 @@ jobs:
       - name: Upload target
         uses: actions/upload-artifact@v1
         with:
-          name: target-graal-${{ matrix.scala }}
-          path: target
+          name: working-dir-graal-${{ matrix.scala }}
+          path: .
 
-  publishandtag:
+  publish-and-tag:
     name: Publish and Tag
     if: github.event_name != 'pull_request' && (contains(github.head_ref, 'backport/v.*') || contains(github.head_ref, 'master'))
     needs: [build]
@@ -76,7 +76,7 @@ jobs:
       - name: Download target artifacts
         uses: actions/download-artifact@v1
         with:
-          name: target-jdk-${{ matrix.scala }}
+          name: working-dir-jdk-${{ matrix.scala }}
       - name: Set up JDK ${{ env.JDK }}
         uses: actions/setup-java@v1
         with:
@@ -94,7 +94,7 @@ jobs:
       - name: Publish Tag
         run: ./scripts/tectonicPublishAndTag
 
-  automerge:
+  auto-merge:
     name: Auto Merge
     if: github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump')
     needs: [build]
@@ -108,7 +108,7 @@ jobs:
       - name: Download target artifacts
         uses: actions/download-artifact@v1
         with:
-          name: target-jdk-${{ matrix.scala }}
+          name: working-dir-jdk-${{ matrix.scala }}
       - name: Setup Git Actor
         run: git config github.actor slamdata-bot
       - name: Install ruby
