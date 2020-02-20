@@ -64,7 +64,7 @@ jobs:
 
   publish-and-tag:
     name: Publish and Tag
-    if: github.event_name != 'pull_request' && (contains(github.head_ref, 'backport/v.*') || contains(github.head_ref, 'master'))
+    if: github.event_name != 'pull_request' && (contains(github.ref, 'backport/v.*') || contains(github.ref, 'master'))
     needs: [jdk-build, graal-build]
     runs-on: [ubuntu-latest]
     strategy:
