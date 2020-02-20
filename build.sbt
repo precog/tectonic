@@ -13,6 +13,8 @@ val Fs2Version = "2.2.1"
 
 ThisBuild / publishAsOSSProject := true
 
+val commonOverrides = Seq(githubRepository := "tectonic")
+
 // Include to also publish a project's tests
 lazy val publishTestsSettings = Seq(
   publishArtifact in (Test, packageBin) := true)
@@ -21,12 +23,14 @@ lazy val root = project
   .in(file("."))
   .settings(noPublishSettings)
   .aggregate(core, fs2, test, benchmarks)
+  .settings(commonOverrides)
   .enablePlugins(AutomateHeaderPlugin)
 
 lazy val core = project
   .in(file("core"))
   .settings(name := "tectonic")
   .settings(libraryDependencies += "org.typelevel" %% "cats-effect" % "2.0.0")
+  .settings(commonOverrides)
   .enablePlugins(AutomateHeaderPlugin)
 
 lazy val fs2 = project
@@ -34,6 +38,7 @@ lazy val fs2 = project
   .dependsOn(
     core,
     test % "test->test")
+  .settings(commonOverrides)
   .settings(name := "tectonic-fs2")
   .settings(
     libraryDependencies += "co.fs2" %% "fs2-core" % Fs2Version)
@@ -43,6 +48,7 @@ lazy val harness = project
   .in(file("harness"))
   .dependsOn(
     fs2)
+  .settings(commonOverrides)
   .settings(name := "tectonic-harness")
   .settings(noPublishSettings)    // mostly for internal testing
   .settings(
@@ -53,6 +59,7 @@ lazy val test = project
   .in(file("test"))
   .dependsOn(core)
   .settings(name := "tectonic-test")
+  .settings(commonOverrides)
   .settings(
     libraryDependencies ++= Seq(
       "org.specs2" %% "specs2-core" % "4.8.1",
@@ -65,6 +72,7 @@ lazy val benchmarks = project
   .in(file("benchmarks"))
   .dependsOn(core, fs2)
   .settings(name := "tectonic-benchmarks")
+  .settings(commonOverrides)
   .settings(noPublishSettings)
   .settings(
     scalacStrictMode := false,
