@@ -65,7 +65,7 @@ jobs:
   publish-and-tag:
     name: Publish and Tag
     if: github.event_name != 'pull_request' && (contains(github.head_ref, 'backport/v.*') || contains(github.head_ref, 'master'))
-    needs: [build]
+    needs: [jdk-build, graal-build]
     runs-on: [ubuntu-latest]
     strategy:
        matrix:
@@ -97,7 +97,7 @@ jobs:
   auto-merge:
     name: Auto Merge
     if: github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump')
-    needs: [build]
+    needs: [jdk-build, graal-build]
     runs-on: [ubuntu-latest]
     strategy:
        matrix:
