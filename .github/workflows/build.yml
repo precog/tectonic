@@ -1,4 +1,4 @@
-name: tectonicbuild
+name: build
 
 on:
   pull_request:
@@ -77,10 +77,20 @@ jobs:
         uses: actions/download-artifact@v1
         with:
           name: target-jdk-${{ matrix.scala }}
+      - name: Set up JDK ${{ env.JDK }}
+        uses: actions/setup-java@v1
+        with:
+          java-version: ${{ env.JDK }}
+      - name: Install ruby
+        uses: actions/setup-ruby@v1
+        with:
+          ruby-version: '2.6'
       - name: Transfer Common Resources
         run: $SBT transferCommonResources
       - name: Export common secrets
         run: $SBT exportSecretsForActions
+      - name: Common setup
+        run: ./scripts/commonSetup
       - name: Publish Tag
         run: ./scripts/tectonicPublishAndTag
 
@@ -113,6 +123,8 @@ jobs:
         run: $SBT transferCommonResources
       - name: Export common secrets
         run: $SBT exportSecretsForActions
+      - name: Common setup
+        run: ./scripts/commonSetup
       - name: Set env vars
         run: |
           echo ::set-env name=VERSIONS::$(git diff HEAD^1 | grep -e '^[-+][0-9]' | sed 's/^[+\-]//' | sed 's/\.[0-9]*$//' | uniq | wc -l)
@@ -120,4 +132,4 @@ jobs:
           echo ::set-env name=IS_REVISION_LABEL::${{ contains(github.event.pull_request.labels.*.name, 'revision') }}
           echo ::set-env name=PR_NUMBER::$(echo "$GITHUB_REF" | cut -d'/' -f3)
       - name: Run automerge
-        run: ./scripts/core/checkAndAutoMerge
+        run: ./scripts/checkAndAutoMerge
