@@ -1,0 +1,135 @@
+name: build
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+env:
+  SBT: ./sbt
+  JDK: 1.8
+  GRAAL: '19.3.1.java8'
+  REPO_SLUG: ${{ github.repository }}
+  ENCRYPTION_PASSWORD: ${{ secrets.ENCRYPTION_PASSWORD }}
+
+jobs:
+  jdk-build:
+    name: Java Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        scala: [2.12.10, 2.13.1]
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v2
+      - name: Set up JDK ${{ env.JDK }}
+        uses: actions/setup-java@v1
+        with:
+          java-version: ${{ env.JDK }}
+      - name: Setup Git Actor
+        run: git config github.actor slamdata-bot
+      - name: Compile and test
+        run: $SBT ++${{ matrix.scala }} ci
+      - name: Upload working directory
+        uses: actions/upload-artifact@v1
+        with:
+          name: working-dir-jdk-${{ matrix.scala }}
+          path: .
+
+  graal-build:
+    name: Graal Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        scala: [2.12.10, 2.13.1]
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v2
+      - name: Install Graal
+        uses: DeLaGuardo/setup-graalvm@2.0
+        with:
+          graalvm-version: ${{ env.GRAAL }}
+      - name: Setup Git Actor
+        run: git config github.actor slamdata-bot
+      - name: Compile and test
+        run: $SBT ++${{ matrix.scala }} ci
+      - name: Upload target
+        uses: actions/upload-artifact@v1
+        with:
+          name: working-dir-graal-${{ matrix.scala }}
+          path: .
+
+  publish-and-tag:
+    name: Publish and Tag
+    if: github.event_name != 'pull_request' && (contains(github.ref, 'backport/v.*') || contains(github.ref, 'master'))
+    needs: [jdk-build, graal-build]
+    runs-on: [ubuntu-latest]
+    strategy:
+       matrix:
+         scala: [2.12.10]
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v2
+      - name: Download target artifacts
+        uses: actions/download-artifact@v1
+        with:
+          name: working-dir-jdk-${{ matrix.scala }}
+      - name: Set up JDK ${{ env.JDK }}
+        uses: actions/setup-java@v1
+        with:
+          java-version: ${{ env.JDK }}
+      - name: Install ruby
+        uses: actions/setup-ruby@v1
+        with:
+          ruby-version: '2.6'
+      - name: Transfer Common Resources
+        run: $SBT transferCommonResources
+      - name: Export common secrets
+        run: $SBT exportSecretsForActions
+      - name: Common setup
+        run: ./scripts/commonSetup
+      - name: Publish Tag
+        run: ./scripts/tectonicPublishAndTag
+
+  auto-merge:
+    name: Auto Merge
+    if: github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump')
+    needs: [jdk-build, graal-build]
+    runs-on: [ubuntu-latest]
+    strategy:
+       matrix:
+         scala: [2.12.10]
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v2
+      - name: Download target artifacts
+        uses: actions/download-artifact@v1
+        with:
+          name: working-dir-jdk-${{ matrix.scala }}
+      - name: Setup Git Actor
+        run: git config github.actor slamdata-bot
+      - name: Install ruby
+        uses: actions/setup-ruby@v1
+        with:
+          ruby-version: '2.6'
+      - name: Set up JDK ${{ env.JDK }}
+        uses: actions/setup-java@v1
+        with:
+          java-version: ${{ env.JDK }}
+      - name: Install common resources
+        run: $SBT transferCommonResources
+      - name: Export common secrets
+        run: $SBT exportSecretsForActions
+      - name: Common setup
+        run: ./scripts/commonSetup
+      - name: Set env vars
+        run: |
+          echo ::set-env name=VERSIONS::$(git diff HEAD^1 | grep -e '^[-+][0-9]' | sed 's/^[+\-]//' | sed 's/\.[0-9]*$//' | uniq | wc -l)
+          echo ::set-env name=CLONE_DIR::$(mktemp -d "/tmp/slamdata-bump.XXXXXXXX")
+          echo ::set-env name=IS_REVISION_LABEL::${{ contains(github.event.pull_request.labels.*.name, 'revision') }}
+          echo ::set-env name=PR_NUMBER::$(echo "$GITHUB_REF" | cut -d'/' -f3)
+      - name: Run automerge
+        run: ./scripts/checkAndAutoMerge
