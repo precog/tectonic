@@ -73,6 +73,8 @@ jobs:
     steps:
       - name: Checkout branch
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 50
       - name: Download target artifacts
         uses: actions/download-artifact@v1
         with:
@@ -93,7 +95,7 @@ jobs:
         run: $SBT exportSecretsForActions
       - name: Common setup
         run: ./scripts/commonSetup
-      - name: Publish Tag
+      - name: Publish and Tag
         run: ./scripts/tectonicPublishAndTag
 
   auto-merge:
