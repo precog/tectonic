@@ -94,6 +94,8 @@ jobs:
         run: $SBT transferCommonResources
       - name: Export common secrets
         run: $SBT exportSecretsForActions
+      - name: Transfer Publish and Tag Resources
+        run: $SBT transferPublishAndTagResources
       - name: Common setup
         run: ./scripts/commonSetup
       - name: Publish and Tag
