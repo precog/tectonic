@@ -97,7 +97,7 @@ jobs:
       - name: Common setup
         run: ./scripts/commonSetup
       - name: Publish and Tag
-        run: ./scripts/tectonicPublishAndTag
+        run: scripts/publishAndTag 'slamdata/tectonic'
 
   auto-merge:
     name: Auto Merge
