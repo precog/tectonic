@@ -3,11 +3,13 @@ import scala.collection.Seq
 ThisBuild / crossScalaVersions := Seq("2.12.10", "2.13.1")
 ThisBuild / scalaVersion := "2.12.10"
 
-homepage in ThisBuild := Some(url("https://github.com/slamdata/tectonic"))
+ThisBuild / githubRepository := "tectonic"
+
+homepage in ThisBuild := Some(url("https://github.com/precog/tectonic"))
 
 scmInfo in ThisBuild := Some(ScmInfo(
-  url("https://github.com/slamdata/tectonic"),
-  "scm:git@github.com:slamdata/tectonic.git"))
+  url("https://github.com/precog/tectonic"),
+  "scm:git@github.com:precog/tectonic.git"))
 
 val Fs2Version = "2.2.1"
 
