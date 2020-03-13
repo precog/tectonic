@@ -12,6 +12,6 @@ jobs:
       - name: Clone devtools
         uses: actions/checkout@v2
         with:
-          repository: slamdata/devtools
+          repository: precog/devtools
       - name: Delete artifacts
         run: bin/delete-gh-artifacts ${{ github.repository }}
