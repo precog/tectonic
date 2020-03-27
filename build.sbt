@@ -1,7 +1,7 @@
 import scala.collection.Seq
 
-ThisBuild / crossScalaVersions := Seq("2.12.10", "2.13.1")
-ThisBuild / scalaVersion := "2.12.10"
+Global / crossScalaVersions := Seq("2.12.10", "2.13.1")
+Global / scalaVersion := "2.12.10"
 
 ThisBuild / githubRepository := "tectonic"
 
@@ -12,6 +12,8 @@ scmInfo in ThisBuild := Some(ScmInfo(
   "scm:git@github.com:precog/tectonic.git"))
 
 val Fs2Version = "2.2.1"
+
+Global / githubWorkflowJavaVersions += "graal@20.0.0"
 
 ThisBuild / publishAsOSSProject := true
 
