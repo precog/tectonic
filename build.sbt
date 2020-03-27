@@ -13,6 +13,8 @@ scmInfo in ThisBuild := Some(ScmInfo(
 
 val Fs2Version = "2.2.1"
 
+ThisBuild / githubWorkflowJavaVersions += "graalvm@20.0.0"
+
 ThisBuild / publishAsOSSProject := true
 
 val commonOverrides = Seq(githubRepository := "tectonic")
@@ -24,7 +26,7 @@ lazy val publishTestsSettings = Seq(
 lazy val root = project
   .in(file("."))
   .settings(noPublishSettings)
-  .aggregate(core, fs2, test, benchmarks)
+  .aggregate(core, fs2, test, benchmarks, harness)
   .settings(commonOverrides)
   .enablePlugins(AutomateHeaderPlugin)
 

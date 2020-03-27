@@ -1,5 +1,5 @@
 /*
- * Copyright 2014–2018 SlamData Inc.
+ * Copyright 2020 Precog Data
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package tectonic.harness
 
-import cats.effect.{IO, Sync}
+import cats.effect.{Blocker, IO, Sync}
 import cats.instances.long._
 
 import fs2.{io, Chunk, Pipe}
@@ -29,12 +29,8 @@ import scala.concurrent.ExecutionContext
 
 import java.lang.{CharSequence, SuppressWarnings}
 import java.nio.file.Path
-import java.util.concurrent.Executors
 
 object RowCountHarness {
-
-  private val BlockingExecutionContext =
-    ExecutionContext.fromExecutorService(Executors.newCachedThreadPool)
 
   private implicit val CS = IO.contextShift(ExecutionContext.global)
 
@@ -51,19 +47,19 @@ object RowCountHarness {
   }
 
   def rowCountJson(file: Path, mode: json.Parser.Mode): IO[Long] = {
-    io.file.readAll[IO](file, BlockingExecutionContext, 16384)
+    Blocker[IO].use(io.file.readAll[IO](file, _, 16384)
       .through(jsonParser(mode))
       .foldMonoid
       .compile.last
-      .map(_.getOrElse(0L))
+      .map(_.getOrElse(0L)))
   }
 
   def rowCountCsv(file: Path, config: csv.Parser.Config): IO[Long] = {
-    io.file.readAll[IO](file, BlockingExecutionContext, 16384)
+    Blocker[IO].use(io.file.readAll[IO](file, _, 16384)
       .through(csvParser(config))
       .foldMonoid
       .compile.last
-      .map(_.getOrElse(0L))
+      .map(_.getOrElse(0L)))
   }
 
   object RowCountPlate {
