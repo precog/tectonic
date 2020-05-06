@@ -11,7 +11,7 @@ scmInfo in ThisBuild := Some(ScmInfo(
   url("https://github.com/precog/tectonic"),
   "scm:git@github.com:precog/tectonic.git"))
 
-val Fs2Version = "2.2.1"
+val Fs2Version = "2.3.0"
 
 ThisBuild / githubWorkflowJavaVersions += "graalvm@20.0.0"
 
