@@ -73,6 +73,12 @@ package object csv {
         val r = errorPF(e)
         (r.isSuccess, r.message)
 
+      case (ParseResult.Partial(a, remaining), _) =>
+        (false, s"left partially succeded with partial result $a and $remaining bytes remaining")
+
+      case (_, ParseResult.Partial(a, remaining)) =>
+        (false, s"right partially succeded with partial result $a and $remaining bytes remaining")
+
       case ParseResult.Failure(e) =>
         (false, s"parsed to an error, but $e was unmatched by the specified pattern")
 

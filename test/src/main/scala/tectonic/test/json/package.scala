@@ -48,6 +48,12 @@ package object json {
         val results = init ++ tail
         (results == expected.toList, s"$results != ${expected.toList}")
 
+      case (ParseResult.Partial(a, remaining), _) =>
+        (false, s"left partially succeded with partial result $a and $remaining bytes remaining")
+
+      case (_, ParseResult.Partial(a, remaining)) =>
+        (false, s"right partially succeded with partial result $a and $remaining bytes remaining")
+
       case (ParseResult.Failure(err), _) =>
         (false, s"failed to parse with error '${err.getMessage}' at ${err.line}:${err.col} (i=${err.index})")
 
