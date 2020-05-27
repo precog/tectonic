@@ -23,10 +23,9 @@ import java.lang.String
 import java.nio.ByteBuffer
 
 import scala.{Array, Byte}
-import scala.util.Either
 
 sealed trait Absorbable[A] {
-  def absorb[B](p: BaseParser[IO, B], a: A): IO[Either[ParseException, B]]
+  def absorb[B](p: BaseParser[IO, B], a: A): IO[ParseResult[B]]
 }
 
 object Absorbable {
@@ -34,17 +33,17 @@ object Absorbable {
   def apply[A](implicit A: Absorbable[A]): Absorbable[A] = A
 
   implicit object StringAbs extends Absorbable[String] {
-    def absorb[B](p: BaseParser[IO, B], str: String): IO[Either[ParseException, B]] =
+    def absorb[B](p: BaseParser[IO, B], str: String): IO[ParseResult[B]] =
       p.absorb(str)
   }
 
   implicit object ByteBufferAbs extends Absorbable[ByteBuffer] {
-    def absorb[B](p: BaseParser[IO, B], bytes: ByteBuffer): IO[Either[ParseException, B]] =
+    def absorb[B](p: BaseParser[IO, B], bytes: ByteBuffer): IO[ParseResult[B]] =
       p.absorb(bytes)
   }
 
   implicit object BArrayAbs extends Absorbable[Array[Byte]] {
-    def absorb[B](p: BaseParser[IO, B], bytes: Array[Byte]): IO[Either[ParseException, B]] =
+    def absorb[B](p: BaseParser[IO, B], bytes: Array[Byte]): IO[ParseResult[B]] =
       p.absorb(bytes)
   }
 }

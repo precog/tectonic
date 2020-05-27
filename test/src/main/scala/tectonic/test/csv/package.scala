@@ -18,16 +18,16 @@ package tectonic
 package test
 
 import cats.effect.IO
+import cats.implicits._
 
 import org.specs2.execute.Result
 import org.specs2.matcher.{Matcher, MatchersImplicits}
 
 import tectonic.csv.Parser
 
-import scala.{Array, PartialFunction, StringContext}
-import scala.util.{Left, Right}
+import scala.{PartialFunction, StringContext}
 
-import java.lang.{String, SuppressWarnings}
+import java.lang.String
 
 // TODO collapse with json package object
 package object csv {
@@ -35,7 +35,6 @@ package object csv {
 
   import MatchersImplicits._
 
-  @SuppressWarnings(Array("org.wartremover.warts.ImplicitParameter"))
   def parseAs(expected: Event*)(implicit config: Parser.Config): Matcher[String] = { input: String =>
     val resultsF = for {
       parser <- Parser(ReifiedTerminalPlate[IO](), config)
@@ -44,19 +43,24 @@ package object csv {
     } yield (left, right)
 
     resultsF.unsafeRunSync() match {
-      case (Right(init), Right(tail)) =>
+      case (ParseResult.Complete(init), ParseResult.Complete(tail)) =>
         val results = init ++ tail
         (results == expected.toList, s"$results != ${expected.toList}")
 
-      case (Left(err), _) =>
+      case (ParseResult.Partial(a, remaining), _) =>
+        (false, s"left partially succeded with partial result $a and $remaining bytes remaining")
+
+      case (_, ParseResult.Partial(a, remaining)) =>
+        (false, s"right partially succeded with partial result $a and $remaining bytes remaining")
+
+      case (ParseResult.Failure(err), _) =>
         (false, s"failed to parse with error '${err.getMessage}' at ${err.line}:${err.col} (i=${err.index})")
 
-      case (_, Left(err)) =>
+      case (_, ParseResult.Failure(err)) =>
         (false, s"failed to parse with error '${err.getMessage}' at ${err.line}:${err.col} (i=${err.index})")
     }
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.ImplicitParameter"))
   def failParseWithError(errorPF: PartialFunction[ParseException, Result])(implicit config: Parser.Config): Matcher[String] = { input: String =>
     val resultsF = for {
       parser <- Parser(ReifiedTerminalPlate[IO](), config)
@@ -65,14 +69,14 @@ package object csv {
     } yield left.flatMap(xs => right.map(xs ::: _))
 
     resultsF.unsafeRunSync() match {
-      case Left(e) if errorPF.isDefinedAt(e) =>
+      case ParseResult.Failure(e) if errorPF.isDefinedAt(e) =>
         val r = errorPF(e)
         (r.isSuccess, r.message)
 
-      case Left(e) =>
+      case ParseResult.Failure(e) =>
         (false, s"parsed to an error, but $e was unmatched by the specified pattern")
 
-      case Right(results) =>
+      case ParseResult.Complete(results) =>
         (false, s"expected error on input '$input', but successfully parsed as $results")
     }
   }

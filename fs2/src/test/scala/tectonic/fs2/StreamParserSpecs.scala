@@ -45,14 +45,14 @@ class StreamParserSpecs extends Specification {
   "stream parser transduction" should {
     "parse a single value" in {
       val results = Stream.chunk(Chunk.Bytes("42".getBytes)).through(parser)
-      results.compile.toList.unsafeRunSync mustEqual List(Num("42", -1, -1), FinishRow)
+      results.compile.toList.unsafeRunSync() mustEqual List(Num("42", -1, -1), FinishRow)
     }
 
     "parse two values from a single chunk" in {
       val results = Stream.chunk(Chunk.Bytes("16 true".getBytes)).through(parser)
       val expected = List(Num("16", -1, -1), FinishRow, Tru, FinishRow)
 
-      results.compile.toList.unsafeRunSync mustEqual expected
+      results.compile.toList.unsafeRunSync() mustEqual expected
     }
 
     "parse a value split across two chunks" in {
@@ -62,7 +62,7 @@ class StreamParserSpecs extends Specification {
       val results = input.through(parser)
       val expected = List(Num("79", -1, -1), FinishRow)
 
-      results.compile.toList.unsafeRunSync mustEqual expected
+      results.compile.toList.unsafeRunSync() mustEqual expected
     }
 
     "parse two values from two chunks" in {
@@ -72,7 +72,7 @@ class StreamParserSpecs extends Specification {
       val results = input.through(parser)
       val expected = List(Num("321", -1, -1), FinishRow, Tru, FinishRow)
 
-      results.compile.toList.unsafeRunSync mustEqual expected
+      results.compile.toList.unsafeRunSync() mustEqual expected
     }
 
     "parse a value from a bytebuffer chunk" in {
@@ -81,7 +81,7 @@ class StreamParserSpecs extends Specification {
       val results = input.through(parser)
       val expected = List(Num("123", -1, -1), FinishRow)
 
-      results.compile.toList.unsafeRunSync mustEqual expected
+      results.compile.toList.unsafeRunSync() mustEqual expected
     }
 
     "parse two values from a split bytevector chunk" in {
@@ -93,7 +93,7 @@ class StreamParserSpecs extends Specification {
       val results = input.through(parser)
       val expected = List(Num("456", -1, -1), FinishRow, Tru, FinishRow)
 
-      results.compile.toList.unsafeRunSync mustEqual expected
+      results.compile.toList.unsafeRunSync() mustEqual expected
     }
   }
 }

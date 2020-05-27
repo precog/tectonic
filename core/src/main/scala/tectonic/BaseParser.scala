@@ -46,17 +46,12 @@ import cats.effect.Sync
 
 import scala.{sys, Array, Boolean, Byte, Char, Int, Nothing, Unit}
 import scala.Predef._
-import scala.math.max
-import scala.util.Either
 
-import java.lang.{CharSequence, String, SuppressWarnings, System}
+import java.lang.{CharSequence, String, System}
+import java.lang.Math.max
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
 
-@SuppressWarnings(
-  Array(
-    "org.wartremover.warts.Var",
-    "org.wartremover.warts.PublicInference"))
 abstract class BaseParser[F[_], A] {
 
   private[this] var data = new Array[Byte](131072)
@@ -78,14 +73,9 @@ abstract class BaseParser[F[_], A] {
   /**
    * More data has been received, consume as much as possible.
    */
-  protected[this] def churn(): Either[ParseException, A]
+  protected[this] def churn(): ParseResult[A]
 
-  @SuppressWarnings(
-    Array(
-      "org.wartremover.warts.NonUnitStatements",
-      "org.wartremover.warts.Overloading",
-      "org.wartremover.warts.Equals"))
-  final def absorb(buf: ByteBuffer)(implicit F: Sync[F]): F[Either[ParseException, A]] = F delay {
+  final def absorb(buf: ByteBuffer)(implicit F: Sync[F]): F[ParseResult[A]] = F delay {
     done = false
     val buflen = buf.limit() - buf.position()
     val need = len + buflen
@@ -103,7 +93,10 @@ abstract class BaseParser[F[_], A] {
     churn()
   }
 
-  final def finish(implicit F: Sync[F]): F[Either[ParseException, A]] = F delay {
+  final def continue(implicit F: Sync[F]): F[ParseResult[A]] =
+    F.delay(churn())
+
+  final def finish(implicit F: Sync[F]): F[ParseResult[A]] = F delay {
     done = true
     churn()
   }
@@ -122,12 +115,10 @@ abstract class BaseParser[F[_], A] {
     }
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.Overloading"))
-  final def absorb(bytes: Array[Byte])(implicit F: Sync[F]): F[Either[ParseException, A]] =
+  final def absorb(bytes: Array[Byte])(implicit F: Sync[F]): F[ParseResult[A]] =
     F.suspend(absorb(ByteBuffer.wrap(bytes)))
 
-  @SuppressWarnings(Array("org.wartremover.warts.Overloading"))
-  final def absorb(s: String)(implicit F: Sync[F]): F[Either[ParseException, A]] =
+  final def absorb(s: String)(implicit F: Sync[F]): F[ParseResult[A]] =
     F.suspend(absorb(ByteBuffer.wrap(s.getBytes(BaseParser.Utf8))))
 
   protected[tectonic] final def unsafeData(): Array[Byte] = data
@@ -137,15 +128,10 @@ abstract class BaseParser[F[_], A] {
    * This is a specialized accessor for the case where our underlying data are
    * bytes not chars.
    */
-  @SuppressWarnings(Array("org.wartremover.warts.Throw"))
   protected[this] final def byte(i: Int): Byte =
     if (i >= len) throw AsyncException else data(i)
 
   // we need to signal if we got out-of-bounds
-  @SuppressWarnings(
-    Array(
-      "org.wartremover.warts.Throw",
-      "org.wartremover.warts.Overloading"))
   protected[this] final def at(i: Int): Char =
     if (i >= len) throw AsyncException else data(i).toChar
 
@@ -156,10 +142,6 @@ abstract class BaseParser[F[_], A] {
    * boundaries. Also, the resulting String is not guaranteed to have length
    * (k - i).
    */
-  @SuppressWarnings(
-    Array(
-      "org.wartremover.warts.Throw",
-      "org.wartremover.warts.Overloading"))
   protected[this] final def at(i: Int, k: Int): CharSequence = {
     if (k > len) throw AsyncException
     val size = k - i
@@ -191,10 +173,6 @@ abstract class BaseParser[F[_], A] {
   /**
    * Used to generate error messages with character info and offsets.
    */
-  @SuppressWarnings(
-    Array(
-      "org.wartremover.warts.NonUnitStatements",
-      "org.wartremover.warts.Throw"))
   protected[this] final def die(i: Int, msg: String): Nothing = {
     val y = line + 1
     val x = column(i) + 1

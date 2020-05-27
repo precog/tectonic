@@ -22,7 +22,7 @@ import cats.implicits._
 
 import org.specs2.mutable.Specification
 
-import tectonic.test.{Event, ReifiedTerminalPlate}
+import tectonic.test.{beComplete, Event, ReifiedTerminalPlate}
 import tectonic.test.json._
 
 import scala.{Array, Boolean, Byte, Int, List, Nil, Unit, Predef}, Predef._
@@ -166,10 +166,10 @@ class ParserSpecs extends Specification {
         def skipped(bytes: Int) = ()
       }), Parser.ValueStream).unsafeRunSync()
 
-      parser.absorb("42").unsafeRunSync() must beRight(())
+      parser.absorb("42").unsafeRunSync() must beComplete(())
       calls.toList mustEqual List(false)
 
-      parser.finish.unsafeRunSync() must beRight(())
+      parser.finish.unsafeRunSync() must beComplete(())
       calls.toList mustEqual List(false, true)
     }
 
@@ -197,13 +197,13 @@ class ParserSpecs extends Specification {
         def skipped(bytes: Int) = ()
       }), Parser.ValueStream).unsafeRunSync()
 
-      parser.absorb("\"h").unsafeRunSync() must beRight(())
+      parser.absorb("\"h").unsafeRunSync() must beComplete(())
       calls.toList mustEqual List(false)
 
-      parser.absorb("i\"").unsafeRunSync() must beRight(())
+      parser.absorb("i\"").unsafeRunSync() must beComplete(())
       calls.toList mustEqual List(false, false)
 
-      parser.finish.unsafeRunSync() must beRight(())
+      parser.finish.unsafeRunSync() must beComplete(())
       calls.toList mustEqual List(false, false, true)
     }
 
@@ -362,9 +362,9 @@ class ParserSpecs extends Specification {
 
       val (first, second, third) = eff.unsafeRunSync()
 
-      first must beRight(List(Skipped(3)))
-      second must beRight(expected)
-      third must beRight(Nil: List[Event])
+      first must beComplete(List(Skipped(3)))
+      second must beComplete(expected)
+      third must beComplete(Nil: List[Event])
     }
   }
 
@@ -385,7 +385,7 @@ class ParserSpecs extends Specification {
       val ioa = for {
         parser <- Parser[IO, Unit](IO.pure(NullPlate), Parser.ValueStream)
         _ <- parser.absorb(front)
-        _ <- replicate(parser.absorb(middle).rethrow, middleCount)
+        _ <- replicate(parser.absorb(middle).map(_.toEitherComplete).rethrow, middleCount)
         _ <- parser.absorb(end)
 
         len <- IO(parser.unsafeLen())

@@ -18,7 +18,9 @@ package tectonic
 
 import cats.effect.IO
 
-import org.specs2.matcher.{BeEqualTo, Matcher}
+import org.specs2.matcher.{BeEqualTo, Expectable, Matcher, MatchResult}
+
+import scala.StringContext
 
 package object test {
 
@@ -29,4 +31,39 @@ package object test {
       plate.finishBatch(true)
     }
   }
+
+  def beComplete[A](a: A): Matcher[ParseResult[A]] =
+    new Matcher[ParseResult[A]] {
+      def apply[B <: ParseResult[A]](exp: Expectable[B]): MatchResult[B] = exp.value match {
+        case ParseResult.Complete(`a`) =>
+          Matcher.result[B](
+            true,
+            s"${exp.description} was Complete and result value matched",
+            "",
+            exp)
+
+        case ParseResult.Complete(b) =>
+          Matcher.result[B](
+            false,
+            "",
+            s"${exp.description} was Complete but $a != $b",
+            exp)
+
+        case ParseResult.Partial(a, remaining) =>
+          Matcher.result[B](
+            false,
+            "",
+            s"${exp.description} was only partially consumed (resulting in $a with $remaining bytes remaining)",
+            exp)
+
+        case ParseResult.Failure(e) =>
+          Matcher.result[B](
+            false,
+            "",
+            s"${exp.description} resulted in a failure with error $e",
+            exp)
+      }
+    }
+
+  // def bePartial[A](a: A, rem: Int): Matcher[ParseResult[A]]
 }

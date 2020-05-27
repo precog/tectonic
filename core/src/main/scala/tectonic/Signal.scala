@@ -18,13 +18,14 @@ package tectonic
 
 import scala.Int
 
-sealed class Signal(final val ordinal: Int)
+sealed abstract class Signal(final val ordinal: Int)
 
 object Signal {
   case object Continue extends Signal(1)
   case object SkipColumn extends Signal(2)
   case object SkipRow extends Signal(-2)
   case object Terminate extends Signal(3)
+  case object BreakBatch extends Signal(4)
 
   private val _Continue = Continue
   private val _SkipColumn = SkipColumn
