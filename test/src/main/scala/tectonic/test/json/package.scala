@@ -73,6 +73,12 @@ package object json {
       case (ParseResult.Complete(_), ParseResult.Complete(_)) =>
         (false, s"blergh", s"input parsed successfully (expected failure)")
 
+      case (ParseResult.Partial(a, remaining), _) =>
+        (false, "", s"left partially succeded with partial result $a and $remaining bytes remaining")
+
+      case (_, ParseResult.Partial(a, remaining)) =>
+        (false, "", s"right partially succeded with partial result $a and $remaining bytes remaining")
+
       case (ParseResult.Failure(err), _) =>
         (err == expected, s"input failed to parse and $err == $expected", s"input failed to parse but $err != $expected")
 
