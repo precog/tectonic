@@ -401,4 +401,103 @@ class ParserSpecs extends Specification {
       len2 must beLessThan(1024 * 1024 + epsilon)
     }
   }
+
+  "partial batch termination" should {
+
+    val plateF = ReifiedTerminalPlate[IO]() map { delegate =>
+      new Plate[List[Event]] {
+        import Signal.BreakBatch
+
+        def nul(): Signal = {
+          delegate.nul()
+          BreakBatch
+        }
+
+        def fls(): Signal = {
+          delegate.fls()
+          BreakBatch
+        }
+
+        def tru(): Signal = {
+          delegate.tru()
+          BreakBatch
+        }
+
+        def map(): Signal = {
+          delegate.map()
+          BreakBatch
+        }
+
+        def arr(): Signal = {
+          delegate.arr()
+          BreakBatch
+        }
+
+        def num(s: CharSequence, decIdx: Int, expIdx: Int): Signal = {
+          delegate.num(s, decIdx, expIdx)
+          BreakBatch
+        }
+
+        def str(s: CharSequence): Signal = {
+          delegate.str(s)
+          BreakBatch
+        }
+
+        def nestMap(pathComponent: CharSequence): Signal = {
+          delegate.nestMap(pathComponent)
+          BreakBatch
+        }
+
+        def nestArr(): Signal = {
+          delegate.nestArr()
+          BreakBatch
+        }
+
+        def nestMeta(pathComponent: CharSequence): Signal = {
+          delegate.nestMeta(pathComponent)
+          BreakBatch
+        }
+
+        def unnest(): Signal = {
+          delegate.unnest()
+          BreakBatch
+        }
+
+        def finishRow(): Unit =
+          delegate.finishRow()
+
+        def finishBatch(terminal: Boolean): List[Event] =
+          delegate.finishBatch(terminal)
+
+        def skipped(bytes: Int): Unit =
+          delegate.skipped(bytes)
+      }
+    }
+
+    "attempt to respect the partial batch hint between array elements" in {
+      val input = "[null, true, false]"
+
+      val eff = for {
+        parser <- Parser(plateF, Parser.ValueStream)
+        result1 <- parser.absorb(input)
+        result2 <- parser.continue
+        result3 <- parser.continue
+        result4 <- parser.continue
+        result5 <- parser.continue
+        result6 <- parser.continue
+        result7 <- parser.finish
+      } yield (result1, result2, result3, result4, result5, result6, result7)
+
+      val (result1, result2, result3, result4, result5, result6, result7) =
+        eff.unsafeRunSync()
+
+      result1 mustEqual ParseResult.Partial(List(NestArr), 18)
+      result2 mustEqual ParseResult.Partial(List(Nul), 14)
+      result3 mustEqual ParseResult.Partial(List(Unnest, NestArr), 13)
+      result4 mustEqual ParseResult.Partial(List(Tru), 8)
+      result5 mustEqual ParseResult.Partial(List(Unnest, NestArr), 7)
+      result6 mustEqual ParseResult.Partial(List(Fls), 1)
+      result7 mustEqual ParseResult.Complete(List(Unnest, FinishRow))
+    }
+  }
 }

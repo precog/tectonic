@@ -29,8 +29,9 @@ import org.specs2.mutable.Specification
 
 import scodec.bits.ByteVector
 
-import scala.{Byte, List}
+import scala.{Boolean, Byte, Int, List, Unit}
 
+import java.lang.CharSequence
 import java.nio.ByteBuffer
 
 class StreamParserSpecs extends Specification {
@@ -94,6 +95,92 @@ class StreamParserSpecs extends Specification {
       val expected = List(Num("456", -1, -1), FinishRow, Tru, FinishRow)
 
       results.compile.toList.unsafeRunSync() mustEqual expected
+    }
+
+    // this test also tests the json parser
+    "parse two values with partial batch consumption" in {
+      val input = Stream.chunk(Chunk.Bytes("[123, false]".getBytes))
+
+      val plateF = ReifiedTerminalPlate[IO]() map { delegate =>
+        new Plate[List[Event]] {
+          import Signal.BreakBatch
+
+          def nul(): Signal = {
+            delegate.nul()
+            BreakBatch
+          }
+
+          def fls(): Signal = {
+            delegate.fls()
+            BreakBatch
+          }
+
+          def tru(): Signal = {
+            delegate.tru()
+            BreakBatch
+          }
+
+          def map(): Signal = {
+            delegate.map()
+            BreakBatch
+          }
+
+          def arr(): Signal = {
+            delegate.arr()
+            BreakBatch
+          }
+
+          def num(s: CharSequence, decIdx: Int, expIdx: Int): Signal = {
+            delegate.num(s, decIdx, expIdx)
+            BreakBatch
+          }
+
+          def str(s: CharSequence): Signal = {
+            delegate.str(s)
+            BreakBatch
+          }
+
+          def nestMap(pathComponent: CharSequence): Signal = {
+            delegate.nestMap(pathComponent)
+            BreakBatch
+          }
+
+          def nestArr(): Signal = {
+            delegate.nestArr()
+            BreakBatch
+          }
+
+          def nestMeta(pathComponent: CharSequence): Signal = {
+            delegate.nestMeta(pathComponent)
+            BreakBatch
+          }
+
+          def unnest(): Signal = {
+            delegate.unnest()
+            BreakBatch
+          }
+
+          def finishRow(): Unit =
+            delegate.finishRow()
+
+          def finishBatch(terminal: Boolean): List[Event] =
+            delegate.finishBatch(terminal)
+
+          def skipped(bytes: Int): Unit =
+            delegate.skipped(bytes)
+        }
+      }
+
+      val results = input.through(StreamParser.foldable(Parser(plateF, Parser.ValueStream)))
+
+      // note that we're getting visibility into the laziness by exposing chunk boundaries
+      results.chunks.compile.toList.unsafeRunSync().map(_.toList) mustEqual
+        List(
+          List(NestArr),
+          List(Num("123", -1, -1)),
+          List(Unnest, NestArr),
+          List(Fls),
+          List(Unnest, FinishRow))
     }
   }
 }

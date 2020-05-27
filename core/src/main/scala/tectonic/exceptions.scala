@@ -31,6 +31,14 @@ final case class IncompleteParseException(msg: String) extends Exception(msg)
 private[tectonic] case object AsyncException extends Exception with control.NoStackTrace
 
 /**
+ * This class is used to signal that we *haven't* reached the end of
+ * our particular input, but the underlying plate is reaching the end
+ * of their reasonable buffer space and is in need of a lazy page
+ * boundary upstream.
+ */
+private[tectonic] case object PartialBatchException extends Exception with control.NoStackTrace
+
+/**
  * This is a more prosaic exception which indicates that we've hit a
  * parsing error.
  */

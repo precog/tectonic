@@ -48,7 +48,8 @@ import cats.syntax.all._
 
 import tectonic.util.{BList, CharBuilder}
 
-import scala.{inline, Array, Boolean, Char, Int, Long, StringContext, Unit} // import scala._, Predef._
+import scala.{inline, Array, Boolean, Char, Int, Long, StringContext, Unit}
+// import scala._, Predef._
 import scala.annotation.{switch, tailrec}
 
 import java.lang.{CharSequence, IndexOutOfBoundsException}
@@ -99,6 +100,10 @@ final class Parser[F[_], A] private (
     private[this] var fallback: BList,
     private[this] var streamMode: Int)
     extends BaseParser[F, A] {
+
+  // flag indicating that a premature batch termination has been requested
+  // this flag is checked (and reset) in the `checkpoint` function
+  private[this] var abbreviate: Boolean = false
 
   /**
    * Explanation of the new synthetic states. The parser machinery
@@ -162,6 +167,7 @@ final class Parser[F[_], A] private (
   private[this] final val SkipColumn = Signal.SkipColumn
   // private[this] final val SkipRow = Signal.SkipRow
   // private[this] final val Terminate = Signal.Terminate
+  private[this] final val BreakBatch = Signal.BreakBatch
 
   private[this] val HexChars: Array[Int] = {
     val arr = new Array[Int](128)
@@ -271,6 +277,10 @@ final class Parser[F[_], A] private (
           ParseResult.Complete(plate.finishBatch(false))
         }
 
+      case PartialBatchException =>
+        // we're not done, but we should spit out whatever we have
+        ParseResult.Partial(plate.finishBatch(false), unsafeLen() - curr)
+
       case e: ParseException =>
         // we hit a parser error, so return that error and results so far
         ParseResult.Failure(e)
@@ -292,6 +302,19 @@ final class Parser[F[_], A] private (
     this.ring = ring
     this.roffset = offset
     this.fallback = fallback
+
+    if (abbreviate) {
+      abbreviate = false
+      throw PartialBatchException   // we've fully checkpointed, so it's safe to just bounce out
+    }
+  }
+
+  private[this] def checkForAbbrev(sig: Signal): Signal = {
+    if (sig == BreakBatch) {
+      abbreviate = true
+    }
+
+    sig
   }
 
   /**
@@ -348,7 +371,9 @@ final class Parser[F[_], A] private (
       }
     }
 
-    plate.num(at(i, j), decIndex, expIndex)
+    // TODO check for BreakBatch here, there, and everywhere
+    // the trick is that we need to checkpoint *before* throwing, otherwise we loop forever
+    checkForAbbrev(plate.num(at(i, j), decIndex, expIndex))
     j
   }
 
@@ -380,7 +405,7 @@ final class Parser[F[_], A] private (
     if (c == '0') {
       j += 1
       if (atEof(j)) {
-        plate.num(at(i, j), decIndex, expIndex)
+        checkForAbbrev(plate.num(at(i, j), decIndex, expIndex))
         return j
       }
       c = at(j)
@@ -388,7 +413,7 @@ final class Parser[F[_], A] private (
       while ('0' <= c && c <= '9') {
         j += 1
         if (atEof(j)) {
-          plate.num(at(i, j), decIndex, expIndex)
+          checkForAbbrev(plate.num(at(i, j), decIndex, expIndex))
           return j
         }
         c = at(j)
@@ -406,7 +431,7 @@ final class Parser[F[_], A] private (
         while ('0' <= c && c <= '9') {
           j += 1
           if (atEof(j)) {
-            plate.num(at(i, j), decIndex, expIndex)
+            checkForAbbrev(plate.num(at(i, j), decIndex, expIndex))
             return j
           }
           c = at(j)
@@ -429,7 +454,7 @@ final class Parser[F[_], A] private (
         while ('0' <= c && c <= '9') {
           j += 1
           if (atEof(j)) {
-            plate.num(at(i, j), decIndex, expIndex)
+            checkForAbbrev(plate.num(at(i, j), decIndex, expIndex))
             return j
           }
           c = at(j)
@@ -439,7 +464,7 @@ final class Parser[F[_], A] private (
       }
     }
 
-    plate.num(at(i, j), decIndex, expIndex)
+    checkForAbbrev(plate.num(at(i, j), decIndex, expIndex))
     j
   }
 
@@ -487,7 +512,7 @@ final class Parser[F[_], A] private (
     val k = parseStringSimple(i + 1)
     if (k != -1) {
       val cs = at(i + 1, k - 1)
-      val s = if (key) plate.nestMap(cs) else plate.str(cs)
+      val s = checkForAbbrev(if (key) plate.nestMap(cs) else plate.str(cs))
       this.curr = k
       return (s ne SkipColumn)
     }
@@ -541,7 +566,7 @@ final class Parser[F[_], A] private (
       }
       c = byte(j) & 0xff
     }
-    val s = if (key) plate.nestMap(sb.makeString) else plate.str(sb.makeString)
+    val s = checkForAbbrev(if (key) plate.nestMap(sb.makeString) else plate.str(sb.makeString))
     this.curr = j + 1
     s ne SkipColumn
   }
@@ -553,7 +578,7 @@ final class Parser[F[_], A] private (
    */
   protected[this] def parseTrue(i: Int): Unit =
     if (at(i + 1) == 'r' && at(i + 2) == 'u' && at(i + 3) == 'e') {
-      val _ = plate.tru()
+      val _ = checkForAbbrev(plate.tru())
       ()
     } else {
       die(i, "expected true")
@@ -566,7 +591,7 @@ final class Parser[F[_], A] private (
    */
   protected[this] def parseFalse(i: Int): Unit =
     if (at(i + 1) == 'a' && at(i + 2) == 'l' && at(i + 3) == 's' && at(i + 4) == 'e') {
-      val _ = plate.fls()
+      val _ = checkForAbbrev(plate.fls())
       ()
     } else {
       die(i, "expected false")
@@ -579,7 +604,7 @@ final class Parser[F[_], A] private (
    */
   protected[this] def parseNull(i: Int): Unit =
     if (at(i + 1) == 'u' && at(i + 2) == 'l' && at(i + 3) == 'l') {
-      val _ = plate.nul()
+      val _ = checkForAbbrev(plate.nul())
       ()
     } else {
       die(i, "expected null")
@@ -727,9 +752,9 @@ final class Parser[F[_], A] private (
         fallback2 = popEnclosureFallback(fallback)
 
       (state: @switch) match {
-        case ARRBEG => plate.arr()
-        case OBJBEG => plate.map()
-        case ARREND | OBJEND => plate.unnest()
+        case ARRBEG => checkForAbbrev(plate.arr())
+        case OBJBEG => checkForAbbrev(plate.map())
+        case ARREND | OBJEND => checkForAbbrev(plate.unnest())
       }
 
       if (offset2 < 0) {
@@ -761,8 +786,8 @@ final class Parser[F[_], A] private (
     } else if (state == ARREND) {
       // we are in an array, expecting to see a comma (before more data).
       if (c == ',') {
-        plate.unnest()
-        if (plate.nestArr() eq SkipColumn) {
+        checkForAbbrev(plate.unnest())
+        if (checkForAbbrev(plate.nestArr()) eq SkipColumn) {
           val i2 = rskip(SKIP_MAIN, i + 1)
           plate.skipped(i2 - (i + 1))
           rparse(ARREND, i2, ring, offset, fallback)
@@ -775,14 +800,14 @@ final class Parser[F[_], A] private (
     } else if (state == OBJEND) {
       // we are in an object, expecting to see a comma (before more data).
       if (c == ',') {
-        plate.unnest()
+        checkForAbbrev(plate.unnest())
         rparse(KEY, i + 1, ring, offset, fallback)
       } else {
         die(i, "expected } or ,")
       }
     } else if (state == ARRBEG) {
       // we are starting an array, expecting to see data or a closing bracket.
-      if (plate.nestArr() eq SkipColumn) {
+      if (checkForAbbrev(plate.nestArr()) eq SkipColumn) {
         val i2 = rskip(SKIP_MAIN, i)
         plate.skipped(i2 - i)
         rparse(ARREND, i2, ring, offset, fallback)
