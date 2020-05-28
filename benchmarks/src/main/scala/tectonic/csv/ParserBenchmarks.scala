@@ -106,9 +106,7 @@ class ParserBenchmarks {
     val processed = if (framework == TectonicFramework) {
       val parser =
         StreamParser[IO, Int, Int](
-          Parser(countingPlate, Parser.Config().copy(row1 = '\n', row2 = 0)))(
-          c => Chunk.singleton(c),
-          cs => Chunk.ints(cs.toArray))
+          Parser(countingPlate, Parser.Config().copy(row1 = '\n', row2 = 0)))(Chunk.singleton(_))
 
       contents.through(parser).foldMonoid
     } else {

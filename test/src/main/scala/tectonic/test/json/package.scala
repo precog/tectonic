@@ -24,7 +24,6 @@ import org.specs2.matcher.{Matcher, MatchersImplicits}
 import tectonic.json.Parser
 
 import scala.{List, StringContext}
-import scala.util.{Left, Right}
 
 package object json {
   private object MatchersImplicits extends MatchersImplicits
@@ -45,14 +44,20 @@ package object json {
     } yield (left, right)
 
     resultsF.unsafeRunSync() match {
-      case (Right(init), Right(tail)) =>
+      case (ParseResult.Complete(init), ParseResult.Complete(tail)) =>
         val results = init ++ tail
         (results == expected.toList, s"$results != ${expected.toList}")
 
-      case (Left(err), _) =>
+      case (ParseResult.Partial(a, remaining), _) =>
+        (false, s"left partially succeded with partial result $a and $remaining bytes remaining")
+
+      case (_, ParseResult.Partial(a, remaining)) =>
+        (false, s"right partially succeded with partial result $a and $remaining bytes remaining")
+
+      case (ParseResult.Failure(err), _) =>
         (false, s"failed to parse with error '${err.getMessage}' at ${err.line}:${err.col} (i=${err.index})")
 
-      case (_, Left(err)) =>
+      case (_, ParseResult.Failure(err)) =>
         (false, s"failed to parse with error '${err.getMessage}' at ${err.line}:${err.col} (i=${err.index})")
     }
   }
@@ -65,13 +70,19 @@ package object json {
     } yield (left, right)
 
     resultsF.unsafeRunSync() match {
-      case (Right(_), Right(_)) =>
+      case (ParseResult.Complete(_), ParseResult.Complete(_)) =>
         (false, s"blergh", s"input parsed successfully (expected failure)")
 
-      case (Left(err), _) =>
+      case (ParseResult.Partial(a, remaining), _) =>
+        (false, "", s"left partially succeded with partial result $a and $remaining bytes remaining")
+
+      case (_, ParseResult.Partial(a, remaining)) =>
+        (false, "", s"right partially succeded with partial result $a and $remaining bytes remaining")
+
+      case (ParseResult.Failure(err), _) =>
         (err == expected, s"input failed to parse and $err == $expected", s"input failed to parse but $err != $expected")
 
-      case (_, Left(err)) =>
+      case (_, ParseResult.Failure(err)) =>
         (err == expected, s"input failed to parse and $err == $expected", s"input failed to parse but $err != $expected")
 
     }

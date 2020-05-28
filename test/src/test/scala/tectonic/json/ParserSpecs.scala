@@ -22,7 +22,7 @@ import cats.implicits._
 
 import org.specs2.mutable.Specification
 
-import tectonic.test.{Event, ReifiedTerminalPlate}
+import tectonic.test.{beComplete, Event, ReifiedTerminalPlate}
 import tectonic.test.json._
 
 import scala.{Array, Boolean, Byte, Int, List, Nil, Unit, Predef}, Predef._
@@ -166,10 +166,10 @@ class ParserSpecs extends Specification {
         def skipped(bytes: Int) = ()
       }), Parser.ValueStream).unsafeRunSync()
 
-      parser.absorb("42").unsafeRunSync() must beRight(())
+      parser.absorb("42").unsafeRunSync() must beComplete(())
       calls.toList mustEqual List(false)
 
-      parser.finish.unsafeRunSync() must beRight(())
+      parser.finish.unsafeRunSync() must beComplete(())
       calls.toList mustEqual List(false, true)
     }
 
@@ -197,13 +197,13 @@ class ParserSpecs extends Specification {
         def skipped(bytes: Int) = ()
       }), Parser.ValueStream).unsafeRunSync()
 
-      parser.absorb("\"h").unsafeRunSync() must beRight(())
+      parser.absorb("\"h").unsafeRunSync() must beComplete(())
       calls.toList mustEqual List(false)
 
-      parser.absorb("i\"").unsafeRunSync() must beRight(())
+      parser.absorb("i\"").unsafeRunSync() must beComplete(())
       calls.toList mustEqual List(false, false)
 
-      parser.finish.unsafeRunSync() must beRight(())
+      parser.finish.unsafeRunSync() must beComplete(())
       calls.toList mustEqual List(false, false, true)
     }
 
@@ -362,9 +362,9 @@ class ParserSpecs extends Specification {
 
       val (first, second, third) = eff.unsafeRunSync()
 
-      first must beRight(List(Skipped(3)))
-      second must beRight(expected)
-      third must beRight(Nil: List[Event])
+      first must beComplete(List(Skipped(3)))
+      second must beComplete(expected)
+      third must beComplete(Nil: List[Event])
     }
   }
 
@@ -385,7 +385,7 @@ class ParserSpecs extends Specification {
       val ioa = for {
         parser <- Parser[IO, Unit](IO.pure(NullPlate), Parser.ValueStream)
         _ <- parser.absorb(front)
-        _ <- replicate(parser.absorb(middle).rethrow, middleCount)
+        _ <- replicate(parser.absorb(middle).map(_.toEitherComplete).rethrow, middleCount)
         _ <- parser.absorb(end)
 
         len <- IO(parser.unsafeLen())
@@ -399,6 +399,110 @@ class ParserSpecs extends Specification {
 
       len must beLessThan(1024 * 1024 + epsilon)
       len2 must beLessThan(1024 * 1024 + epsilon)
+    }
+  }
+
+  "partial batch termination" should {
+
+    val plateF = ReifiedTerminalPlate[IO]() map { delegate =>
+      new Plate[List[Event]] {
+        import Signal.BreakBatch
+
+        def nul(): Signal = {
+          delegate.nul()
+          BreakBatch
+        }
+
+        def fls(): Signal = {
+          delegate.fls()
+          BreakBatch
+        }
+
+        def tru(): Signal = {
+          delegate.tru()
+          BreakBatch
+        }
+
+        def map(): Signal = {
+          delegate.map()
+          BreakBatch
+        }
+
+        def arr(): Signal = {
+          delegate.arr()
+          BreakBatch
+        }
+
+        def num(s: CharSequence, decIdx: Int, expIdx: Int): Signal = {
+          delegate.num(s, decIdx, expIdx)
+          BreakBatch
+        }
+
+        def str(s: CharSequence): Signal = {
+          delegate.str(s)
+          BreakBatch
+        }
+
+        def nestMap(pathComponent: CharSequence): Signal = {
+          delegate.nestMap(pathComponent)
+          BreakBatch
+        }
+
+        def nestArr(): Signal = {
+          delegate.nestArr()
+          BreakBatch
+        }
+
+        def nestMeta(pathComponent: CharSequence): Signal = {
+          delegate.nestMeta(pathComponent)
+          BreakBatch
+        }
+
+        def unnest(): Signal = {
+          delegate.unnest()
+          BreakBatch
+        }
+
+        def finishRow(): Unit =
+          delegate.finishRow()
+
+        def finishBatch(terminal: Boolean): List[Event] =
+          delegate.finishBatch(terminal)
+
+        def skipped(bytes: Int): Unit =
+          delegate.skipped(bytes)
+      }
+    }
+
+    "attempt to respect the partial batch hint between array elements" in {
+      val input = "[null, true, false, \"nope\", 123.456, {\"foo\":[]}]"
+
+      val eff = for {
+        parser <- Parser(plateF, Parser.ValueStream)
+        result1 <- parser.absorb(input)
+        resultsN <- List.fill(13)(parser.continue).sequence
+        resultFin <- parser.finish
+      } yield result1 :: resultsN ::: List(resultFin)
+
+      val results =
+        eff.unsafeRunSync()
+
+      results mustEqual List(
+        ParseResult.Partial(List(NestArr), 47),
+        ParseResult.Partial(List(Nul), 43),
+        ParseResult.Partial(List(Unnest, NestArr), 42),
+        ParseResult.Partial(List(Tru), 37),
+        ParseResult.Partial(List(Unnest, NestArr), 36),
+        ParseResult.Partial(List(Fls), 30),
+        ParseResult.Partial(List(Unnest, NestArr), 29),
+        ParseResult.Partial(List(Str("nope")), 22),
+        ParseResult.Partial(List(Unnest, NestArr), 21),
+        ParseResult.Partial(List(Num("123.456", 3, -1)), 13),
+        ParseResult.Partial(List(Unnest, NestArr), 12),
+        ParseResult.Partial(List(NestMap("foo")), 5),
+        ParseResult.Partial(List(Arr), 2),
+        ParseResult.Partial(List(Unnest), 1),
+        ParseResult.Complete(List(Unnest, FinishRow)))
     }
   }
 }

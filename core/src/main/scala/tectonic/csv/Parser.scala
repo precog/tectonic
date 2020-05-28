@@ -24,16 +24,9 @@ import tectonic.util.CharBuilder
 
 import scala.{inline, Array, Boolean, Byte, Char, Int, Nothing, Unit}
 import scala.annotation.{switch, tailrec}
-import scala.util.{Either, Left, Right}
 
-import java.lang.{CharSequence, String, SuppressWarnings, System}
+import java.lang.{CharSequence, String, System}
 
-  @SuppressWarnings(
-    Array(
-      "org.wartremover.warts.Var",
-      "org.wartremover.warts.FinalVal",
-      "org.wartremover.warts.Null",
-      "org.wartremover.warts.PublicInference"))
 final class Parser[F[_], A](plate: Plate[A], config: Parser.Config) extends BaseParser[F, A] {
 
   /*
@@ -74,11 +67,7 @@ final class Parser[F[_], A](plate: Plate[A], config: Parser.Config) extends Base
   private[this] final val closeQuote: Int = config.closeQuote & 0xff
   private[this] final val escape: Int = config.escape & 0xff
 
-  @SuppressWarnings(
-    Array(
-      "org.wartremover.warts.Equals",
-      "org.wartremover.warts.NonUnitStatements"))
-  protected[this] final def churn(): Either[ParseException, A] = {
+  protected[this] final def churn(): ParseResult[A] = {
     try {
       offset = reset(offset)
       parse(state, curr, column)
@@ -91,46 +80,40 @@ final class Parser[F[_], A](plate: Plate[A], config: Parser.Config) extends Base
               case RECORD =>
                 if (column == 0) {
                   // we just saw a complete row, just finish up
-                  Right(plate.finishBatch(true))
+                  ParseResult.Complete(plate.finishBatch(true))
                 } else if (atEndOfRow(column) || (state & INFER_MASK) == INFERRING) {
                   plate.nestMap(header(column))
                   plate.str("")
                   plate.unnest()
                   plate.finishRow()
-                  Right(plate.finishBatch(true))
+                  ParseResult.Complete(plate.finishBatch(true))
                 } else {
-                  Left(ParseException("unexpected end of file: missing records", -1, -1, -1))
+                  ParseResult.Failure(ParseException("unexpected end of file: missing records", -1, -1, -1))
                 }
 
               case END =>
                 // treat EOF at the end of the row as an implicit record delimiter
                 if (atEndOfRow(column) || (state & INFER_MASK) == INFERRING) {
                   plate.finishRow()
-                  Right(plate.finishBatch(true))
+                  ParseResult.Complete(plate.finishBatch(true))
                 } else {
-                  Left(ParseException("unexpected end of file: missing records", -1, -1, -1))
+                  ParseResult.Failure(ParseException("unexpected end of file: missing records", -1, -1, -1))
                 }
             }
           } else {
-            Left(ParseException("unexpected end of file in header row", -1, -1, -1))
+            ParseResult.Failure(ParseException("unexpected end of file in header row", -1, -1, -1))
           }
         } else {
           // we ran out of data, so return what we have so far
-          Right(plate.finishBatch(false))
+          ParseResult.Complete(plate.finishBatch(false))
         }
 
       case e: ParseException =>
         // we hit a parser error, so return that error and results so far
-        Left(e)
+        ParseResult.Failure(e)
     }
   }
 
-  @SuppressWarnings(
-    Array(
-      "org.wartremover.warts.Equals",
-      "org.wartremover.warts.Return",
-      "org.wartremover.warts.While",
-      "org.wartremover.warts.Throw"))
   private[this] final def parseRecordUnquoted(i: Int): CharSequence = {
     if (done) {
       return parseRecordUnquotedDone(i)
@@ -154,12 +137,6 @@ final class Parser[F[_], A](plate: Plate[A], config: Parser.Config) extends Base
     error("impossible")
   }
 
-  @SuppressWarnings(
-    Array(
-      "org.wartremover.warts.Equals",
-      "org.wartremover.warts.Return",
-      "org.wartremover.warts.While",
-      "org.wartremover.warts.Throw"))
   private[this] final def parseRecordUnquotedDone(i: Int): CharSequence = {
     val data = unsafeData()
     val len = unsafeLen()
@@ -182,12 +159,6 @@ final class Parser[F[_], A](plate: Plate[A], config: Parser.Config) extends Base
     at(i, j)
   }
 
-  @SuppressWarnings(
-    Array(
-      "org.wartremover.warts.Equals",
-      "org.wartremover.warts.Return",
-      "org.wartremover.warts.While",
-      "org.wartremover.warts.Throw"))
   private[this] final def parseRecordQuoted(i: Int): CharSequence = {
     if (done) {
       return parseRecordQuotedDone(i)
@@ -232,12 +203,6 @@ final class Parser[F[_], A](plate: Plate[A], config: Parser.Config) extends Base
     error("impossible")
   }
 
-  @SuppressWarnings(
-    Array(
-      "org.wartremover.warts.Equals",
-      "org.wartremover.warts.Return",
-      "org.wartremover.warts.While",
-      "org.wartremover.warts.Throw"))
   private[this] final def parseRecordQuotedDone(i: Int): CharSequence = {
     val data = unsafeData()
     val len = unsafeLen()
@@ -292,12 +257,6 @@ final class Parser[F[_], A](plate: Plate[A], config: Parser.Config) extends Base
   }
 
   @tailrec
-  @SuppressWarnings(
-    Array(
-      "org.wartremover.warts.NonUnitStatements",
-      "org.wartremover.warts.Equals",
-      "org.wartremover.warts.Throw",
-      "org.wartremover.warts.Throw"))
   private[this] final def parse(state: Int, j: Int, column: Int): Nothing = {
     val i = reset(j)
 
@@ -477,7 +436,6 @@ final class Parser[F[_], A](plate: Plate[A], config: Parser.Config) extends Base
 
   // generates things like A, B, C, ..., Z, AA, AB, etc...
   // literally converts column into big-endian base-26
-  @SuppressWarnings(Array("org.wartremover.warts.While"))
   private[this] final def asHeader(column: Int): String = {
     val back = new Array[Char](column / 26 + 1)    // deal with ceiling
     var i = 0
@@ -496,7 +454,6 @@ final class Parser[F[_], A](plate: Plate[A], config: Parser.Config) extends Base
   }
 
   @inline
-  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
   private[this] final def atEndOfRow(column: Int): Boolean =
     column == headerMax
 }
@@ -510,7 +467,6 @@ object Parser {
   }
 
   // defaults to Excel-style with Windows newlines
-  @SuppressWarnings(Array("org.wartremover.warts.DefaultArguments"))
   final case class Config(
       header: Boolean = true,
       record: Byte = ',',

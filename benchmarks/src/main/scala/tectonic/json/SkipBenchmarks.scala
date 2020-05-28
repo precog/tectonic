@@ -78,9 +78,7 @@ class SkipBenchmarks {
       BlockingPool,
       ChunkSize)
 
-    val parser = StreamParser(Parser(plateF, Parser.UnwrapArray))(
-      _ => Chunk.empty[Nothing],
-      _ => Chunk.empty[Nothing])
+    val parser = StreamParser(Parser(plateF, Parser.UnwrapArray))(_ => Chunk.empty[Nothing])
 
     contents.through(parser).compile.drain.unsafeRunSync()
   }

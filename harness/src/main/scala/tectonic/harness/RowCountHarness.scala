@@ -34,17 +34,11 @@ object RowCountHarness {
 
   private implicit val CS = IO.contextShift(ExecutionContext.global)
 
-  def jsonParser(mode: json.Parser.Mode): Pipe[IO, Byte, Long] = {
-    StreamParser(json.Parser(RowCountPlate[IO], mode))(
-      oneChunk = Chunk.singleton(_),
-      manyChunk = cs => Chunk.singleton(cs.sum))
-  }
+  def jsonParser(mode: json.Parser.Mode): Pipe[IO, Byte, Long] =
+    StreamParser(json.Parser(RowCountPlate[IO], mode))(Chunk.singleton(_))
 
-  def csvParser(config: csv.Parser.Config): Pipe[IO, Byte, Long] = {
-    StreamParser(csv.Parser(RowCountPlate[IO], config))(
-      oneChunk = Chunk.singleton(_),
-      manyChunk = cs => Chunk.singleton(cs.sum))
-  }
+  def csvParser(config: csv.Parser.Config): Pipe[IO, Byte, Long] =
+    StreamParser(csv.Parser(RowCountPlate[IO], config))(Chunk.singleton(_))
 
   def rowCountJson(file: Path, mode: json.Parser.Mode): IO[Long] = {
     Blocker[IO].use(io.file.readAll[IO](file, _, 16384)
