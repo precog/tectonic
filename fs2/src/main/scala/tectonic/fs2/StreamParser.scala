@@ -58,24 +58,6 @@ object StreamParser {
           case Some((chunk: Chunk.ByteBuffer, tail)) =>
             Pull.eval(parser.absorb(chunk.buf)).flatMap(handleResult(_)(loop(tail, parser, _, Some(chunk.size))))
 
-          case Some((chunk @ Chunk.ByteVectorChunk(bv), tail)) =>
-            val manyF = bv.foldLeftBB(Pull.pure(0).covaryAll[F, B, Int]) { (accF, buf) =>
-              def next(remaining2: Int): Pull[F, B, Int] = {
-                if (buf.remaining() / 2 < remaining2)
-                  Pull.eval(parser.continue).flatMap(handleResult(_)(next))
-                else
-                  Pull.pure(remaining2)
-              }
-
-              accF flatMap { remaining2 =>
-                Pull.eval(parser.absorb(buf)).flatMap(handleResult(_)(r => next(r + remaining2)))
-              }
-            }
-
-            manyF flatMap { remaining =>
-              loop(tail, parser, remaining, Some(chunk.size))
-            }
-
           case Some((chunk, tail)) =>
             Pull.eval(parser.absorb(chunk.toByteBuffer)).flatMap(handleResult(_)(loop(tail, parser, _, Some(chunk.size))))
 

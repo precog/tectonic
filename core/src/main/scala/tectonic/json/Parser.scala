@@ -371,8 +371,6 @@ final class Parser[F[_], A] private (
       }
     }
 
-    // TODO check for BreakBatch here, there, and everywhere
-    // the trick is that we need to checkpoint *before* throwing, otherwise we loop forever
     checkForAbbrev(plate.num(at(i, j), decIndex, expIndex))
     j
   }
