@@ -475,29 +475,34 @@ class ParserSpecs extends Specification {
     }
 
     "attempt to respect the partial batch hint between array elements" in {
-      val input = "[null, true, false]"
+      val input = "[null, true, false, \"nope\", 123.456, {\"foo\":[]}]"
 
       val eff = for {
         parser <- Parser(plateF, Parser.ValueStream)
         result1 <- parser.absorb(input)
-        result2 <- parser.continue
-        result3 <- parser.continue
-        result4 <- parser.continue
-        result5 <- parser.continue
-        result6 <- parser.continue
-        result7 <- parser.finish
-      } yield (result1, result2, result3, result4, result5, result6, result7)
+        resultsN <- List.fill(13)(parser.continue).sequence
+        resultFin <- parser.finish
+      } yield result1 :: resultsN ::: List(resultFin)
 
-      val (result1, result2, result3, result4, result5, result6, result7) =
+      val results =
         eff.unsafeRunSync()
 
-      result1 mustEqual ParseResult.Partial(List(NestArr), 18)
-      result2 mustEqual ParseResult.Partial(List(Nul), 14)
-      result3 mustEqual ParseResult.Partial(List(Unnest, NestArr), 13)
-      result4 mustEqual ParseResult.Partial(List(Tru), 8)
-      result5 mustEqual ParseResult.Partial(List(Unnest, NestArr), 7)
-      result6 mustEqual ParseResult.Partial(List(Fls), 1)
-      result7 mustEqual ParseResult.Complete(List(Unnest, FinishRow))
+      results mustEqual List(
+        ParseResult.Partial(List(NestArr), 47),
+        ParseResult.Partial(List(Nul), 43),
+        ParseResult.Partial(List(Unnest, NestArr), 42),
+        ParseResult.Partial(List(Tru), 37),
+        ParseResult.Partial(List(Unnest, NestArr), 36),
+        ParseResult.Partial(List(Fls), 30),
+        ParseResult.Partial(List(Unnest, NestArr), 29),
+        ParseResult.Partial(List(Str("nope")), 22),
+        ParseResult.Partial(List(Unnest, NestArr), 21),
+        ParseResult.Partial(List(Num("123.456", 3, -1)), 13),
+        ParseResult.Partial(List(Unnest, NestArr), 12),
+        ParseResult.Partial(List(NestMap("foo")), 5),
+        ParseResult.Partial(List(Arr), 2),
+        ParseResult.Partial(List(Unnest), 1),
+        ParseResult.Complete(List(Unnest, FinishRow)))
     }
   }
 }
