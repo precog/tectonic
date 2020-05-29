@@ -13,8 +13,6 @@ scmInfo in ThisBuild := Some(ScmInfo(
 
 val Fs2Version = "2.3.0"
 
-ThisBuild / githubWorkflowJavaVersions += "graalvm@20.0.0"
-
 ThisBuild / publishAsOSSProject := true
 
 val commonOverrides = Seq(githubRepository := "tectonic")
