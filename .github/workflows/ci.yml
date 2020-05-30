@@ -16,6 +16,7 @@ on:
 
 env:
   SBT: ./sbt
+  JABBA_INDEX: 'https://github.com/1Jo1/jabba/raw/support-graalvm-java-8-and-11/index.json'
   REPO_SLUG: ${{ github.repository }}
   ENCRYPTION_PASSWORD: ${{ secrets.ENCRYPTION_PASSWORD }}
   GITHUB_ACTOR: precog-bot
@@ -29,7 +30,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         scala: [2.12.10, 2.13.1]
-        java: [adopt@1.8]
+        java: [adopt@1.8, graalvm8@20.1.0]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (fast)
