@@ -19,7 +19,7 @@ env:
   JABBA_INDEX: 'https://github.com/1Jo1/jabba/raw/support-graalvm-java-8-and-11/index.json'
   REPO_SLUG: ${{ github.repository }}
   ENCRYPTION_PASSWORD: ${{ secrets.ENCRYPTION_PASSWORD }}
-  GITHUB_ACTOR: precog-bot
+  GITHUB_ACTOR: precog-bot-2
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
