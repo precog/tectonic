@@ -11,7 +11,7 @@ scmInfo in ThisBuild := Some(ScmInfo(
   url("https://github.com/precog/tectonic"),
   "scm:git@github.com:precog/tectonic.git"))
 
-val Fs2Version = "2.4.5"
+val Fs2Version = "2.5.6"
 
 ThisBuild / publishAsOSSProject := true
 
@@ -31,7 +31,7 @@ lazy val root = project
 lazy val core = project
   .in(file("core"))
   .settings(name := "tectonic")
-  .settings(libraryDependencies += "org.typelevel" %% "cats-effect" % "2.2.0")
+  .settings(libraryDependencies += "org.typelevel" %% "cats-effect" % "2.5.1")
   .settings(commonOverrides)
   .enablePlugins(AutomateHeaderPlugin)
 
@@ -86,7 +86,7 @@ lazy val benchmarks = project
       "co.fs2" %% "fs2-core" % Fs2Version,
       "co.fs2" %% "fs2-io"   % Fs2Version,
 
-      "org.http4s" %% "jawn-fs2" % "1.0.0"))
+      "org.http4s" %% "jawn-fs2" % "1.1.3"))
   .settings(    // magic rewiring so sbt-jmh works sanely
     Jmh / sourceDirectory := (Compile / sourceDirectory).value,
     Jmh / classDirectory := (Compile / classDirectory).value,
