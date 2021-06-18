@@ -64,10 +64,10 @@ lazy val test = project
   .settings(commonOverrides)
   .settings(
     libraryDependencies ++= Seq(
-      "org.specs2" %% "specs2-core" % "4.10.5",
-      "org.scalacheck" %% "scalacheck" % "1.14.3"),
+      "org.specs2" %% "specs2-core" % "4.10.6",
+      "org.scalacheck" %% "scalacheck" % "1.15.4"),
 
-    libraryDependencies += "org.specs2" %% "specs2-scalacheck" % "4.10.5" % Test)
+    libraryDependencies += "org.specs2" %% "specs2-scalacheck" % "4.10.6" % Test)
   .enablePlugins(AutomateHeaderPlugin)
 
 lazy val benchmarks = project
