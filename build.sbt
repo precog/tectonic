@@ -11,7 +11,7 @@ scmInfo in ThisBuild := Some(ScmInfo(
   url("https://github.com/precog/tectonic"),
   "scm:git@github.com:precog/tectonic.git"))
 
-val Fs2Version = "2.4.5"
+val Fs2Version = "2.5.6"
 
 ThisBuild / publishAsOSSProject := true
 
@@ -31,7 +31,7 @@ lazy val root = project
 lazy val core = project
   .in(file("core"))
   .settings(name := "tectonic")
-  .settings(libraryDependencies += "org.typelevel" %% "cats-effect" % "2.2.0")
+  .settings(libraryDependencies += "org.typelevel" %% "cats-effect" % "2.5.1")
   .settings(commonOverrides)
   .enablePlugins(AutomateHeaderPlugin)
 
@@ -64,10 +64,10 @@ lazy val test = project
   .settings(commonOverrides)
   .settings(
     libraryDependencies ++= Seq(
-      "org.specs2" %% "specs2-core" % "4.10.5",
-      "org.scalacheck" %% "scalacheck" % "1.14.3"),
+      "org.specs2" %% "specs2-core" % "4.10.6",
+      "org.scalacheck" %% "scalacheck" % "1.15.4"),
 
-    libraryDependencies += "org.specs2" %% "specs2-scalacheck" % "4.10.5" % Test)
+    libraryDependencies += "org.specs2" %% "specs2-scalacheck" % "4.10.6" % Test)
   .enablePlugins(AutomateHeaderPlugin)
 
 lazy val benchmarks = project
@@ -86,7 +86,7 @@ lazy val benchmarks = project
       "co.fs2" %% "fs2-core" % Fs2Version,
       "co.fs2" %% "fs2-io"   % Fs2Version,
 
-      "org.http4s" %% "jawn-fs2" % "1.0.0"))
+      "org.http4s" %% "jawn-fs2" % "1.1.3"))
   .settings(    // magic rewiring so sbt-jmh works sanely
     Jmh / sourceDirectory := (Compile / sourceDirectory).value,
     Jmh / classDirectory := (Compile / classDirectory).value,

@@ -116,10 +116,10 @@ abstract class BaseParser[F[_], A] {
   }
 
   final def absorb(bytes: Array[Byte])(implicit F: Sync[F]): F[ParseResult[A]] =
-    F.suspend(absorb(ByteBuffer.wrap(bytes)))
+    F.defer(absorb(ByteBuffer.wrap(bytes)))
 
   final def absorb(s: String)(implicit F: Sync[F]): F[ParseResult[A]] =
-    F.suspend(absorb(ByteBuffer.wrap(s.getBytes(BaseParser.Utf8))))
+    F.defer(absorb(ByteBuffer.wrap(s.getBytes(BaseParser.Utf8))))
 
   protected[tectonic] final def unsafeData(): Array[Byte] = data
   protected[tectonic] final def unsafeLen(): Int = len
